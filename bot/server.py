@@ -534,6 +534,39 @@ def topics_list() -> str:
     return "\n".join(f"`{n + 1}.` {ln.strip()}" for n, (_, ln) in enumerate(topics))
 
 
+_DAY_KO = {"Mon": "월", "Tue": "화", "Wed": "수", "Thu": "목", "Fri": "금", "Sat": "토", "Sun": "일"}
+_CAL_RE = re.compile(r"OnCalendar=(\S+)\s+\S+\s+(\d{1,2}:\d{2})")
+
+
+def schedule_summary() -> str:
+    """정기 실행 스케줄을 systemd 타이머에서 *실시간* 조회(하드코딩 금지).
+    실제 가동 중인 타이머가 진실의 원천 → 봇 응답과 스케줄이 어긋나지 않는다.
+    systemd 미사용 환경(개발 맥 등)·조회 실패 시 빈 문자열 반환(문구 생략)."""
+    try:
+        cal = subprocess.run(
+            ["systemctl", "show", "gncausreport-brief.timer", "-p", "TimersCalendar", "--value"],
+            capture_output=True, text=True, timeout=5).stdout
+        nxt = subprocess.run(
+            ["systemctl", "show", "gncausreport-brief.timer", "-p", "NextElapseUSecRealtime", "--value"],
+            capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
+    days: list[str] = []
+    time_s = ""
+    for spec, t in _CAL_RE.findall(cal):
+        time_s = t
+        days.extend(spec.split(","))
+    if not days:
+        return ""
+    order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    uniq = sorted(set(days), key=lambda d: order.index(d) if d in order else 99)
+    ko = "·".join(_DAY_KO.get(d, d) for d in uniq)
+    out = f"자동 실행: {ko} {time_s}"
+    if nxt:
+        out += f" · 다음 {nxt}"
+    return out
+
+
 def _normalize_topic(spec: str) -> str:
     """'주제 | 채널 | depth' 입력을 정규화(채널 기본 exec-team, depth 기본 medium)."""
     parts = [p.strip() for p in spec.split("|")]
@@ -663,7 +696,9 @@ def _handle_gnc(ack, command, respond):
             removed = topics_rm(n)
             respond(f"🗑️ 삭제됨: `{removed}`" if removed else f"{n}번 주제가 없습니다. 먼저 `/지엔씨 주제`로 번호를 확인하세요.")
         else:  # 목록(기본): list/목록/없음/미인식
-            respond("📋 현재 정기 주제 (월·수·금 08:00 실행):\n" + topics_list())
+            sched = schedule_summary()
+            header = f"📋 현재 정기 주제 ({sched}):" if sched else "📋 현재 정기 주제:"
+            respond(header + "\n" + topics_list())
         return
 
     respond(_gnc_help())

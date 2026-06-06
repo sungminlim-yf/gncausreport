@@ -31,3 +31,23 @@
 | 2026-06-06 | 호주 DC 백업전원 디젤→가스터빈·HVO 전환 | Data Center Frontier — Aeroderivative Turbines Move to the Center of AI Data Center Power Strategy | https://www.datacenterfrontier.com/energy/article/55358731/ |
 | 2026-06-06 | 호주 DC 백업전원 디젤→가스터빈·HVO 전환 | Marketplace (APM) — More data centers plan to build their own natural gas plants for power | https://www.marketplace.org/story/2026/02/04/more-data-centers-plan-to-build-their-own-natural-gas-plants-for-power |
 | 2026-06-06 | 호주 DC 백업전원 디젤→가스터빈·HVO 전환 | ARENA — Ampol Brisbane Renewable Fuels Pre-FEED Study | https://arena.gov.au/projects/ampol-brisbane-renewable-fuels-pre-feed-study/ |
+
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | CEFC / Baringa — Getting the balance right: data centre growth and the energy transition (2025-12, 정부계 1차) | https://www.cefc.com.au/media/hs5ner3s/getting-the-balance-right-data-centres-and-the-energy-transition-full-report.pdf |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Expert Market Research — Australia Data Centre Market Size, Share & Forecast 2035 (2025, 리서치펌 추정) | https://www.expertmarketresearch.com.au/reports/australia-data-centre-market |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Mandala Partners / Data Centres Australia — Data Centres as Enabling Infrastructure (2025-11, 운영사 공동의뢰) | https://datacentres.org.au/wp-content/uploads/2025/11/2025-11_DCA-Mandala-Data-Centres-as-Enabling-Infrastructure.pdf |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | MarketsandMarkets — Data Center Generators Companies (CAT·Cummins 1위, 리서치펌 추정) | https://www.marketsandmarkets.com/ResearchInsight/data-center-generators-companies.asp |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Mordor Intelligence — Data Center Generator Market Size & Share Analysis (리서치펌 추정) | https://www.mordorintelligence.com/industry-reports/data-center-generator-market |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Rolls-Royce mtu Solutions — The heart of data: mtu emergency gensets safeguard Australia's data centers (NEXTDC, 기업자료) | https://www.mtu-solutions.com/cn/zh/stories/power-generation/diesel-generator-sets/the-heart-of-data.html |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Cummins Inc. — Critical protection power for Digital Realty, Erskine Park Australia (기업 사례) | https://www.cummins.com/en-na/case-studies/cummins-power-generation-delivers-critical-protection-power-digital-realty |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Eneraque (GNC 파트너) — Data Centres: Critical Back Up Power (2024-10-18, 기업자료) | https://eneraque.com/data-centres-critical-back-up-power/ |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | AusTender (Australian Government, Dept of Finance) — Contract & Standing Offer Notices: Batteries and generators category (정부 입찰포털) | https://www.tenders.gov.au/ |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Energy Power Systems Australia (EPSA, Cat 딜러) — Uninterruptable Power: Data Centre White Paper (2024-05, 기업자료) | https://www.energypower.com.au/wp-content/uploads/2024/05/EPSA_Data-Centre_White-Paper.pdf |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | Cummins Inc. — PowerHour: Generator Set Ratings for Data Centers (ISO 8528-1) (2020-01, 기준문서) | https://www.cummins.com/sites/default/files/2020-01/Cummins%20PowerHour_Genset%20Ratings%20Data%20Centers%20and%20Others%20(1PDH).pdf |
+| 2026-06-06 | 호주 DC 비상발전기 시장·조달·선정기준 | CoreSite — Breaking Down Data Center Tier Level Classifications (업계 해설) | https://www.coresite.com/blog/breaking-down-data-center-tiers-classifications |
+
+| 2026-06-06 | 호주 비상발전기 시장규모·경쟁사·조달 | RenewEconomy — Diesel backup gensets and the data centre boom | https://reneweconomy.com.au/diesel-backup-gensets-are-big-winners-from-the-data-centre-boom-our-cities-would-be-better-off-with-batteries/ |
+| 2026-06-06 | 호주 비상발전기 시장규모·경쟁사·조달 | Arizton — APAC Data Center Generator Market | https://www.arizton.com/market-reports/apac-data-center-generator-market-report |
+| 2026-06-06 | 호주 비상발전기 시장규모·경쟁사·조달 | Global Market Insights — Diesel Gensets Market 2025-2034 | https://www.gminsights.com/industry-analysis/diesel-gensets-market |
+| 2026-06-06 | 호주 비상발전기 시장규모·경쟁사·조달 | IMARC Group — Australia Diesel Generator Market | https://www.imarcgroup.com/australia-diesel-generator-market |
+| 2026-06-06 | 호주 비상발전기 시장규모·경쟁사·조달 | Business Wire/ResearchAndMarkets — Australia Colocation Data Center Portfolio 2025 | https://www.businesswire.com/news/home/20251205007956/en/ |
+| 2026-06-06 | 호주 비상발전기 시장규모·경쟁사·조달 | SLP Alpha — Generac Bets on the AI Power Boom | https://slpalpha.com/2026/03/30/generac-bets-on-the-ai-power-boom-assessing-generacs-high-stakes-data-center-strategy/ |

@@ -1,12 +1,14 @@
 [Unit]
-Description=GNC AU Report 주간 정기 실행 타이머 (월 08:00, 시스템 타임존=Australia/Sydney)
+Description=GNC AU Report 정기 실행 타이머 (월·수·금 08:00, 시스템 타임존=Australia/Sydney)
 Documentation=file:///home/ubuntu/gncausreport/deploy/README.md
 
 [Timer]
 # launchd 의 StartCalendarInterval(월 08:00) 대체. 시스템 타임존 기준이므로
 # setup.sh 가 timedatectl 로 Australia/Sydney 를 설정한다.
-# 주 2회로 늘리려면 OnCalendar 줄을 하나 더 추가(예: Thu *-*-* 08:00:00).
+# 횟수 조정은 OnCalendar 줄 추가/삭제로(요일별 한 줄). 현재 주 3회.
 OnCalendar=Mon *-*-* 08:00:00
+OnCalendar=Wed *-*-* 08:00:00
+OnCalendar=Fri *-*-* 08:00:00
 # VM 이 꺼져 있어 놓친 실행은 다음 부팅 시 한 번 따라잡기.
 Persistent=true
 

@@ -14,3 +14,13 @@ venv/
 # OS / 에디터
 .DS_Store
 Thumbs.db
+
+# Claude Code 개인·머신별 로컬 설정 (공유 X)
+.claude/settings.local.json
+
+# 독자 원본 — 개인 민감 정보 (D23). briefs(간추림)는 추적, profiles(원본)는 제외
+audience/profiles/
+
+# 실행별 작업 산출물 (D1) — .gitkeep만 추적
+runs/*
+!runs/.gitkeep

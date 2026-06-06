@@ -1,0 +1,3 @@
+# 이 폴더는 /brief 실행마다 runs/<run-id>/ 작업폴더를 생성한다 (D1).
+# 각 run 폴더: meta.json, researcher.json, curator.json, draft.md, review.json, cost.json
+# 실행 산출물은 .gitignore로 버전관리에서 제외(.gitkeep만 추적).

@@ -24,3 +24,6 @@ audience/profiles/
 # 실행별 작업 산출물 (D1) — .gitkeep만 추적
 runs/*
 !runs/.gitkeep
+
+# 봇 런타임 상태 — run_id↔게시 메시지 매핑(채널ID·ts 등 머신별 상태, D9)
+archive/run-index.json

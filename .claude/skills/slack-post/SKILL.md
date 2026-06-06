@@ -15,11 +15,18 @@ description: 완성된 보고서를 슬랙 채널에 게시한다. 게시 전 ar
 
 2. **전송** — `scripts/send.py` 호출
    ```bash
+   # 1단계(현재 데모): 테스트 채널 바로 게시
    python .claude/skills/slack-post/scripts/send.py \
      --file archive/<YYYY-MM-DD>_<주제>.md \
-     --channel-alias <대상채널 또는 staging> \
-     --run-id <run-id> \
-     --stage draft|final
+     --channel-alias <대상채널> \
+     --stage final --transport webhook
+
+   # 2단계+: 스테이징 채널에 초안+승인버튼 (승인 시 --target-alias 채널에 본 게시)
+   python .claude/skills/slack-post/scripts/send.py \
+     --file archive/<YYYY-MM-DD>_<주제>.md \
+     --channel-alias staging \
+     --stage draft --transport webapi \
+     --run-id <run-id> --target-alias <대상채널>
    ```
    - 본문 전체를 메시지로 전송하되, 슬랙 블록 길이 제한을 넘으면 **자동 분할 전송**한다(D10).
 
@@ -30,9 +37,10 @@ description: 완성된 보고서를 슬랙 채널에 게시한다. 게시 전 ar
 
 > `send.py`는 전송 추상화(`--transport webhook|webapi`, 기본은 `.env`의 `SLACK_TRANSPORT`)로 설계되어 1단계 Webhook이 2단계에서 사장되지 않는다.
 
-## Block Kit 승인 버튼 (D5)
+## Block Kit 승인 버튼 + 바인딩 (D5·D9)
 - `--stage draft`이면 메시지에 **[✅ 승인] / [❌ 반려]** 버튼 블록을 부착한다.
-- 버튼 `action_id`: `approve_post` / `reject_post`, `value`: `run-id`(또는 archive 경로). 봇이 이 값으로 어떤 초안을 본 게시할지 식별한다.
+- 버튼 `action_id`: `approve_post` / `reject_post`, `value`: `run-id`.
+- draft 게시 시 send.py가 **`archive/run-index.json`**(gitignore)에 `{run_id: {archive, target_alias, draft{channel,ts}, status}}`를 기록한다. 봇은 버튼 value(run_id)로 이 인덱스를 조회해 본 게시할 archive를 찾고, 본 게시 후 `approved{channel,ts}`를 추가해 **3단계 Q&A 스레드 바인딩**의 근거로 쓴다.
 
 ## 비밀정보 (환경변수)
 - Webhook URL·Bot Token(`xoxb-`)·채널 ID는 **모두 `.env`**에서 읽는다. SKILL.md/코드에 하드코딩 금지.

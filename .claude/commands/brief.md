@@ -35,8 +35,8 @@ argument-hint: <주제> <대상채널> [--depth shallow|medium|deep] [--budget <
 ## 5. slack-post (스킬) — 게시
 - `pass`한 `draft.md`를 `archive/<날짜>_<주제>.md`로 저장하고 `posted-index.md` 갱신(D6).
 - 게시:
-  - **1단계(현재, D22)**: `send.py --stage final --transport webhook --channel-alias <대상채널>`로 **테스트 채널 바로 게시**(승인·Q&A 생략).
-  - **2단계+**: `send.py --stage draft --transport webapi --channel-alias staging --run-id <run-id>`로 **스테이징 채널 초안+승인버튼** → 봇이 [승인] 클릭 수신 후 본 게시 처리(D2·D5·§4.5).
+  - **1단계(D22)**: `send.py --stage final --transport webhook --channel-alias <대상채널>`로 **테스트 채널 바로 게시**(승인·Q&A 생략).
+  - **2단계+(현재)**: `send.py --stage draft --transport webapi --channel-alias staging --run-id <run-id> --target-alias <대상채널>`로 **스테이징 채널 초안+승인버튼** 게시. send.py가 `archive/run-index.json`에 매핑을 남기고, **상시 가동 봇(`bot/server.py`)**이 [승인] 클릭을 수신해 `--target-alias` 채널에 본 게시한다(D2·D5·§4.5). 봇이 떠 있지 않으면 승인 버튼이 동작하지 않으므로 사전 가동 필요.
 
 ## 6. 마무리
 - `runs/<run-id>/cost.json`에 비용·호출 수 기록, 예산 대비 보고.

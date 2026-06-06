@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-slack-post 전송 스크립트 (D10 · D19 · D21, v3)
+slack-post 전송 스크립트 (D10 · D19 · D21, v3 / 2단계)
 
 보고서 파일을 슬랙 채널에 전송한다.
 전송 추상화: --transport webhook(1단계 스캐폴드) | webapi(2단계+ 승인·스레드)
@@ -10,12 +10,16 @@ slack-post 전송 스크립트 (D10 · D19 · D21, v3)
   # 1단계: Incoming Webhook으로 테스트 채널 바로 게시
   python send.py --file archive/2026-06-06_주제.md --channel-alias exec-team --stage final --transport webhook
 
-  # 2단계+: Web API로 스테이징 채널에 초안+승인버튼 게시
-  python send.py --file ... --channel-alias staging --stage draft --transport webapi --run-id 2026-06-06_x
+  # 2단계+: Web API로 스테이징 채널에 초안+승인버튼 게시 (승인 시 target-alias 채널에 본 게시)
+  python send.py --file archive/2026-06-06_주제.md --channel-alias staging \
+      --stage draft --transport webapi --run-id 2026-06-06_x --target-alias exec-team
 
 종료코드: 0 성공 / 1 실패(오케스트레이터가 운영자 채널 알림 트리거)
 
-webapi 전송은 slack_sdk가 있으면 사용하고, 없으면 표준 라이브러리로 chat.postMessage 를 직접 호출한다.
+2단계 바인딩(D9):
+  draft 게시 시 archive/run-index.json 에 {run_id: {archive, target_alias, draft{channel,ts}, status}} 를 기록한다.
+  봇(bot/server.py)이 승인 버튼 value(run_id)로 이 인덱스를 조회해 본 게시할 archive 파일을 찾고,
+  본 게시 후 approved{channel,ts} 를 같은 인덱스에 추가해 3단계 Q&A 스레드 바인딩의 근거로 쓴다.
 """
 from __future__ import annotations
 
@@ -31,11 +35,14 @@ MAX_CHARS = 2900
 SLACK_POST_URL = "https://slack.com/api/chat.postMessage"
 
 
+def repo_root() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.abspath(os.path.join(here, "..", "..", "..", ".."))
+
+
 def load_env() -> None:
     """.env 를 가볍게 로드(외부 의존성 없이). 이미 설정된 환경변수는 덮어쓰지 않음."""
-    here = os.path.dirname(os.path.abspath(__file__))
-    root = os.path.abspath(os.path.join(here, "..", "..", "..", ".."))
-    env_path = os.path.join(root, ".env")
+    env_path = os.path.join(repo_root(), ".env")
     if not os.path.exists(env_path):
         return
     with open(env_path, "r", encoding="utf-8") as f:
@@ -45,6 +52,29 @@ def load_env() -> None:
                 continue
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
+
+# ── run-index: run_id ↔ archive·게시 메타 매핑 (2↔3단계 바인딩 SSOT) ──────
+def run_index_path() -> str:
+    return os.path.join(repo_root(), "archive", "run-index.json")
+
+
+def load_run_index() -> dict:
+    p = run_index_path()
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def save_run_index(idx: dict) -> None:
+    p = run_index_path()
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(idx, f, ensure_ascii=False, indent=2)
 
 
 def resolve_channel_id(alias: str) -> str:
@@ -79,6 +109,10 @@ def approval_blocks(text: str, run_id: str) -> list[dict]:
     return [
         {"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}},
         {
+            "type": "context",
+            "elements": [{"type": "mrkdwn", "text": f"run-id: `{run_id}` · 지정 승인자만 유효(D17)"}],
+        },
+        {
             "type": "actions",
             "block_id": "approval_actions",
             "elements": [
@@ -110,8 +144,9 @@ def post_webhook(text: str) -> None:
         _http_post(url, {"text": chunk}, headers={"Content-Type": "application/json"})
 
 
-def post_webapi(text: str, channel_alias: str, stage: str, run_id: str) -> None:
-    """2단계+: chat.postMessage 로 게시. stage=draft 면 승인 버튼 부착(D5)."""
+def post_webapi(text: str, channel_alias: str, stage: str, run_id: str,
+                target_alias: str, archive_file: str) -> None:
+    """2단계+: chat.postMessage 로 게시. stage=draft 면 승인 버튼 부착 + run-index 기록(D5·D9)."""
     token = os.environ.get("SLACK_BOT_TOKEN")
     if not token:
         die("SLACK_BOT_TOKEN(xoxb-) 미설정(.env). Web API는 2단계에서 활성화.")
@@ -121,15 +156,29 @@ def post_webapi(text: str, channel_alias: str, stage: str, run_id: str) -> None:
         "Authorization": f"Bearer {token}",
     }
     chunks = split_message(text)
+    draft_ts = None
     for i, chunk in enumerate(chunks):
+        is_last = i == len(chunks) - 1
         payload: dict = {"channel": channel, "text": chunk}
         # 초안의 마지막(또는 유일) 청크에만 승인 버튼을 부착
-        if stage == "draft" and i == len(chunks) - 1:
+        if stage == "draft" and is_last:
             payload["blocks"] = approval_blocks(chunk, run_id)
-        resp = _http_post(SLACK_POST_URL, payload, headers=headers)
-        body = json.loads(resp)
+        body = json.loads(_http_post(SLACK_POST_URL, payload, headers=headers))
         if not body.get("ok"):
             die(f"chat.postMessage 오류: {body.get('error')}")
+        if stage == "draft" and is_last:
+            draft_ts = body.get("ts")
+
+    # 초안이면 봇이 승인 시 조회할 수 있도록 run-index 에 매핑 기록(D9)
+    if stage == "draft":
+        idx = load_run_index()
+        idx[run_id] = {
+            "archive": archive_file,            # 본 게시할 보고서 파일(레포 상대경로)
+            "target_alias": target_alias,       # 승인 시 본 게시할 채널 별칭
+            "draft": {"channel": channel, "ts": draft_ts},
+            "status": "draft",
+        }
+        save_run_index(idx)
 
 
 def _http_post(url: str, payload: dict, headers: dict) -> bytes:
@@ -154,10 +203,12 @@ def main() -> None:
     load_env()
     ap = argparse.ArgumentParser(description="슬랙 보고서 전송")
     ap.add_argument("--file", required=True, help="전송할 보고서 파일 경로")
-    ap.add_argument("--channel-alias", required=True, help="채널 별칭(exec-team/staging/ops...)")
+    ap.add_argument("--channel-alias", required=True, help="게시 채널 별칭(final=대상 / draft=staging)")
     ap.add_argument("--stage", choices=["draft", "final"], default="final",
                     help="draft=스테이징 초안(+승인버튼), final=본 게시")
-    ap.add_argument("--run-id", default="", help="승인 버튼 value에 담을 run-id(draft 시 필수)")
+    ap.add_argument("--run-id", default="", help="승인 버튼 value/인덱스 키에 담을 run-id(draft 시 필수)")
+    ap.add_argument("--target-alias", default="exec-team",
+                    help="draft 승인 시 본 게시할 대상 채널 별칭(기본 exec-team, D20)")
     ap.add_argument("--transport", choices=["webhook", "webapi"],
                     default=os.environ.get("SLACK_TRANSPORT", "webhook"),
                     help="전송 방식(기본 .env의 SLACK_TRANSPORT)")
@@ -176,8 +227,8 @@ def main() -> None:
         post_webhook(text)
     else:
         if args.stage == "draft" and not args.run_id:
-            die("draft 게시에는 --run-id 가 필요합니다(승인 버튼 value).")
-        post_webapi(text, args.channel_alias, args.stage, args.run_id)
+            die("draft 게시에는 --run-id 가 필요합니다(승인 버튼 value/인덱스 키).")
+        post_webapi(text, args.channel_alias, args.stage, args.run_id, args.target_alias, args.file)
 
     print(f"[slack-post] OK: {args.channel_alias}({args.stage}/{args.transport}) ← {args.file}")
 

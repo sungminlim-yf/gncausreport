@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timedelta
 
 from slack_bolt import App
@@ -32,8 +33,9 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")
 RUN_INDEX = os.path.join(ARCHIVE_DIR, "run-index.json")
 
-# 슬랙 단일 메시지 권장 한도(보수적). send.py 의 split_message 와 동일 규칙(D10).
-MAX_CHARS = 2900
+# 공유 Block Kit 렌더러(레포 루트) — 본 게시도 send.py 와 동일하게 마크다운→블록 렌더링
+sys.path.insert(0, REPO_ROOT)
+import slack_blocks  # noqa: E402
 
 
 def _load_dotenv() -> None:
@@ -130,33 +132,18 @@ def read_report(path: str) -> str:
         return f.read()
 
 
-def split_message(text: str, limit: int = MAX_CHARS) -> list[str]:
-    """긴 보고서를 문단 경계로 분할(D10). send.py 와 동일 규칙(슬랙 임의 자동분할 방지)."""
-    if len(text) <= limit:
-        return [text]
-    chunks, buf = [], ""
-    for para in text.split("\n\n"):
-        if len(buf) + len(para) + 2 > limit and buf:
-            chunks.append(buf.rstrip())
-            buf = ""
-        buf += para + "\n\n"
-    if buf.strip():
-        chunks.append(buf.rstrip())
-    return chunks
-
-
 def post_report(client, channel: str, text: str) -> dict:
-    """보고서를 깨끗한 청크로 분할해 게시한다.
+    """보고서를 Block Kit 으로 게시한다(가독성). 보통 단일 메시지(블록 ≤50).
 
-    첫 청크는 채널 top-level 로, 나머지는 첫 메시지 스레드에 묶는다 → 채널엔 글 하나만
-    보이고 본문 전체는 그 스레드에 담긴다. 첫 메시지 ts 가 3단계 Q&A 스레드 루트(D9)다.
-    반환: 첫(루트) 메시지의 {channel, ts}.
+    50블록 초과 시에만 첫 메시지 스레드에 이어 붙인다. 첫(루트) 메시지 ts 가
+    3단계 Q&A 스레드 루트(D9). 반환: 첫(루트) 메시지의 {channel, ts}.
     """
-    chunks = split_message(text)
-    root = client.chat_postMessage(channel=channel, text=chunks[0])
+    groups = slack_blocks.chunk_blocks(slack_blocks.render_blocks(text))
+    fb = slack_blocks.fallback_text(text)
+    root = client.chat_postMessage(channel=channel, text=fb, blocks=groups[0])
     root_ts = root["ts"]
-    for chunk in chunks[1:]:
-        client.chat_postMessage(channel=root["channel"], text=chunk, thread_ts=root_ts)
+    for group in groups[1:]:
+        client.chat_postMessage(channel=root["channel"], text=fb, blocks=group, thread_ts=root_ts)
     return {"channel": root["channel"], "ts": root_ts}
 
 

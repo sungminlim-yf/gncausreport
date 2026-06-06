@@ -30,6 +30,10 @@ import sys
 import urllib.request
 import urllib.error
 
+# 공유 Block Kit 렌더러(레포 루트) 임포트 — 마크다운 보고서 → 슬랙 블록
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")))
+import slack_blocks  # noqa: E402
+
 # 슬랙 단일 텍스트 블록 권장 한도(보수적). 초과 시 분할 전송(D10).
 MAX_CHARS = 2900
 SLACK_POST_URL = "https://slack.com/api/chat.postMessage"
@@ -104,37 +108,6 @@ def split_message(text: str, limit: int = MAX_CHARS) -> list[str]:
     return chunks
 
 
-def approval_blocks(text: str, run_id: str) -> list[dict]:
-    """초안 메시지에 부착할 [승인]/[반려] Block Kit 버튼(D5)."""
-    return [
-        {"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}},
-        {
-            "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"run-id: `{run_id}` · 지정 승인자만 유효(D17)"}],
-        },
-        {
-            "type": "actions",
-            "block_id": "approval_actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "text": {"type": "plain_text", "text": "✅ 승인"},
-                    "action_id": "approve_post",
-                    "value": run_id,
-                },
-                {
-                    "type": "button",
-                    "style": "danger",
-                    "text": {"type": "plain_text", "text": "❌ 반려"},
-                    "action_id": "reject_post",
-                    "value": run_id,
-                },
-            ],
-        },
-    ]
-
-
 def post_webhook(text: str) -> None:
     """1단계 스캐폴드: Incoming Webhook 단방향 전송(승인·스레드 불가, D21)."""
     url = os.environ.get("SLACK_WEBHOOK_URL")
@@ -146,7 +119,7 @@ def post_webhook(text: str) -> None:
 
 def post_webapi(text: str, channel_alias: str, stage: str, run_id: str,
                 target_alias: str, archive_file: str) -> None:
-    """2단계+: chat.postMessage 로 게시. stage=draft 면 승인 버튼 부착 + run-index 기록(D5·D9)."""
+    """2단계+: chat.postMessage 로 Block Kit 게시. stage=draft 면 승인버튼 부착 + run-index 기록(D5·D9)."""
     token = os.environ.get("SLACK_BOT_TOKEN")
     if not token:
         die("SLACK_BOT_TOKEN(xoxb-) 미설정(.env). Web API는 2단계에서 활성화.")
@@ -155,18 +128,21 @@ def post_webapi(text: str, channel_alias: str, stage: str, run_id: str,
         "Content-Type": "application/json; charset=utf-8",
         "Authorization": f"Bearer {token}",
     }
-    chunks = split_message(text)
+    # 마크다운 보고서 → Block Kit. 보통 1그룹(단일 메시지), 50블록 초과 시 분할.
+    groups = slack_blocks.chunk_blocks(slack_blocks.render_blocks(text))
+    fb = slack_blocks.fallback_text(text)
     draft_ts = None
-    for i, chunk in enumerate(chunks):
-        is_last = i == len(chunks) - 1
-        payload: dict = {"channel": channel, "text": chunk}
-        # 초안의 마지막(또는 유일) 청크에만 승인 버튼을 부착
+    for i, group in enumerate(groups):
+        is_last = i == len(groups) - 1
+        blocks = list(group)
+        # 초안의 마지막(또는 유일) 그룹에만 승인 버튼을 부착
         if stage == "draft" and is_last:
-            payload["blocks"] = approval_blocks(chunk, run_id)
+            blocks = blocks + slack_blocks.approval_action_blocks(run_id)
+        payload = {"channel": channel, "text": fb, "blocks": blocks}
         body = json.loads(_http_post(SLACK_POST_URL, payload, headers=headers))
         if not body.get("ok"):
             die(f"chat.postMessage 오류: {body.get('error')}")
-        if stage == "draft" and is_last:
+        if is_last:
             draft_ts = body.get("ts")
 
     # 초안이면 봇이 승인 시 조회할 수 있도록 run-index 에 매핑 기록(D9)

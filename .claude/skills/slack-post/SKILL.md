@@ -29,6 +29,7 @@ description: 완성된 보고서를 슬랙 채널에 게시한다. 게시 전 ar
      --run-id <run-id> --target-alias <대상채널>
    ```
    - 본문 전체를 메시지로 전송하되, 슬랙 블록 길이 제한을 넘으면 **자동 분할 전송**한다(D10).
+   - **가독성(Block Kit)**: webapi 게시는 보고서 마크다운을 `slack_blocks.py` 공유 렌더러로 **Block Kit**(header·section·divider·context)으로 변환해 게시한다. 슬랙은 `#`·`**`·`[t](u)`를 렌더링하지 않으므로 평문 마크다운 대신 블록을 쓴다. 보통 단일 메시지(블록 ≤50), 초과 시에만 분할. (webhook 1단계 경로는 평문 유지)
 
 ## 1단계 vs 2단계+ (D21)
 

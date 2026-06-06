@@ -28,8 +28,9 @@ _BOLD = re.compile(r"\*\*([^*\n]+)\*\*")
 # → 소수점(6.27, 공백 없음)·번호목록(1. , 숫자 뒤)·약어(No. 1, 라틴 글자 뒤)는 건드리지 않음.
 _SENT_END = re.compile(r"(?<=[가-힣\)\]])\.[ \t]+")
 
-# 닷포인트 1칸 들여쓰기(헤더 대비 한 단위). 본문 문장·불릿 공용.
-_DOT = " • "
+# 본문 문단 들여쓰기 — 헤더 아래 종속 문단임을 시각화(2칸). 닷·화살표·번호목록 등 본문 줄 전체에 적용.
+_INDENT = "  "
+_DOT = _INDENT + "• "   # 닷포인트(들여쓰기 + 불릿). 본문 문장·불릿 공용.
 # 닷을 붙이지 않는 '마커 줄': 화살표(시사점) · 동그라미숫자(사례) 로 시작.
 _ARROWS = ("→", "⇒", "➔", "➜", "▶", "►", "↳", "⤷", "=>")
 _CIRCLED = set("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳")
@@ -84,22 +85,28 @@ def _simplify_source(line: str) -> str:
 
 
 def _dot_points(text: str) -> str:
-    """문장 줄바꿈된 본문의 각 줄 앞에 ' • '(1칸 들여쓰기)를 붙여 스캔하기 쉽게 만든다.
-    단, 이미 마커가 있는 줄은 닷을 붙이지 않는다:
-      불릿(•) · 블록인용(>) · 화살표(→ 시사점) · 동그라미숫자(① 사례) · 번호 헤더/목록(1.).
-    (제목류 ### / ## 는 flush_body 를 거치지 않으므로 여기 오지 않는다)"""
+    """본문 문단을 들여쓰기해 '헤더 아래 딸린 문단'임을 시각화하고, 일반 문장엔 닷(•)을 붙인다.
+
+    - base 유지(들여쓰기 X): 본문 내 굵은 번호 소제목('*1. …*')·블록인용('>'). (### / ## 섹션 제목은 flush_body 미경유)
+    - 들여쓰기만(닷 X): 화살표(→ 시사점)·동그라미숫자(① 사례)·번호 목록('1. …').
+    - 들여쓰기 + 닷: 그 외 일반 문장·기존 불릿.
+    문단의 첫 줄뿐 아니라 모든 줄을 동일 들여쓰기해 헤더와 본문이 구별되게 한다."""
     out = []
     for ln in text.split("\n"):
         s = ln.strip()
         if not s:
-            out.append(ln)
+            out.append("")
             continue
-        core = s[1:].lstrip() if s.startswith("*") else s  # 굵게(*..)로 시작하면 안쪽을 기준으로 판정
-        if (s.startswith(("•", ">")) or s.startswith(_ARROWS)
-                or core[:1] in _CIRCLED or _NUMHEAD.match(core)):
-            out.append(ln)
+        starred = s.startswith("*")
+        core = s[1:].lstrip() if starred else s  # 굵게(*..)로 시작하면 안쪽을 기준으로 판정
+        if (starred and _NUMHEAD.match(core)) or s.startswith(">"):
+            out.append(s)                                   # 헤더·블록인용 → base
+        elif s.startswith("•"):
+            out.append(_DOT + s[1:].lstrip())               # 기존 불릿 → 들여쓰기 정규화
+        elif s.startswith(_ARROWS) or s[:1] in _CIRCLED or _NUMHEAD.match(s):
+            out.append(_INDENT + s)                         # 화살표·동그라미·번호목록 → 들여쓰기만
         else:
-            out.append(_DOT + s)
+            out.append(_DOT + s)                            # 일반 문장 → 들여쓰기 + 닷
     return "\n".join(out)
 
 

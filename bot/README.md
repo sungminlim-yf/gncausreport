@@ -79,6 +79,34 @@ python3 -m venv .venv
 
 ---
 
+## 5. 3단계 Q&A 종단 테스트
+
+질문은 두 경로로 받는다: **(1) 게시된 글 스레드**(그 글만 근거, 정밀, D9) / **(2) 채널 직접 질문**(활성 보고서 전체에서 관련 글 탐색 — 슬랙 미숙 사용자 배려).
+
+### a) 켜기
+1. 슬랙 앱에서 **Event Subscriptions** 활성 + 봇 이벤트 `app_mention`·`message.channels`·`message.groups` 구독(위 1-c), **Reinstall**.
+2. `.env`에서 `QA_ENABLED=1`, `QA_MODEL=claude-haiku-4-5`(채널 질문은 다중 보고서라 가벼운 모델 권장) → **봇 재시작**.
+
+### b-1) 글 스레드 질문 (정밀)
+1. 승인 플로우(위 4)로 exec-team 채널에 본 게시된 글을 연다.
+2. 그 메시지 **스레드에** 질문(예: "비타민 B6 채널 제한은 언제 발효되나요?"). 봇 멘션은 선택.
+3. 봇이 `💬 …작성하는 중…` 표시 후, **그 글 한 건**만 근거로 출처 포함 답변으로 갱신.
+
+### b-2) 채널 직접 질문 (스레드 불필요)
+1. exec-team 채널(또는 `QA_CHANNELS`)에 **그냥 질문을 친다**(예: "호주 발전기 시장 경쟁사 점유율은?").
+2. 질문 신호(물음표·의문 키워드)가 있으면, 봇이 **활성 보고서들 중 관련 글을 골라** 답하고, 답변을 **스레드+채널 동시 노출**(reply_broadcast)해 누구나 바로 본다.
+3. 어느 보고서로도 답할 수 없으면 "게시된 보고서로는 답하기 어렵습니다"라고 정직하게 밝힌다.
+
+### c) 동작 원리
+- 그라운딩: 스레드가 특정 글에 바인딩(`approved.ts == thread_ts`, D9)되면 **그 글만**, 아니면(채널 질문) `active_archives()`의 **활성 보고서 전체**(최신 ≤10건)에서 관련 글을 LLM이 선택.
+- 생성: `_generate_answer()`가 헤드리스 `claude -p`로 보고서 전문만 근거로 답변(도구 미사용·추측 금지·출처 표기). 스케줄러·`/gnc 조사`와 동일 런타임 → 새 의존성·API 키 불필요.
+  - **QA_MODEL**: 채널 질문은 여러 보고서를 한 번에 넣으므로 **가벼운 모델**(예: `claude-haiku-4-5`, ~10초/건) 권장 — Opus는 다중 보고서에서 타임아웃 위험.
+- 채널 게이트: 채널 직접 질문은 `QA_CHANNELS`(미설정 시 exec-team) + 질문 신호일 때만. 스레드 질문은 채널과 무관하게 동작.
+- 비차단(D4): 이벤트는 Bolt가 자동 ack, 답변은 백그라운드 스레드. `app_mention`+`message` 중복 발화는 `(channel,ts)` 1회 처리로 제거.
+- 보관 한도(D24): `ARCHIVE_ACTIVE_MONTHS` 경과 글은 그라운딩 후보에서 제외.
+
+---
+
 ## 슬랙에서 직접 제어 — `/gnc` 슬래시 명령 (모바일 OK)
 
 봇이 떠 있으면 슬랙(모바일 포함)에서 조사 트리거·주제 관리를 직접 할 수 있다. 지정 승인자(D17)만 사용 가능.
@@ -109,6 +137,6 @@ python3 -m venv .venv
 | run_id↔archive 조회 | `find_archive_for_run()` ← `archive/run-index.json` | D9 |
 | 승인 시 본 게시 + 스레드 기록 | `handle_approve()` → `approved{ts}` 저장 | D2·D9 |
 | Q&A 스레드 바인딩 | `find_archive_for_thread()` (approved.ts 매칭) | D9 |
-| Q&A 답변 생성 | `_answer_question()` TODO (QA_ENABLED 게이트) | 3단계 |
+| Q&A 답변 생성 | `_answer_question()`→`_qa_work()`→헤드리스 `claude -p` (QA_ENABLED 게이트) | 3단계 |
 | 활성 보관 한도 | `ARCHIVE_ACTIVE_MONTHS` 컷오프 | D24 |
 | 운영자 알림 | `_notify_ops()` | D19 |

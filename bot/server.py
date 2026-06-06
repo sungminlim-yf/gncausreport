@@ -14,8 +14,9 @@
   - 승인: 버튼 value(run_id) → 인덱스에서 archive 조회 → 본 게시 → approved{ts} 기록(스레드 루트).
   - Q&A: 스레드 thread_ts == 어떤 run 의 approved.ts 면 그 archive 를 근거로 답변(3단계).
 
-※ 2단계는 승인 플로우가 본 기능이다. 3단계 Q&A 답변 생성(LLM 호출)은 QA_ENABLED=1 일 때만 활성화되며
-   기본은 침묵한다(미완성 답변으로 실제 글 스레드를 오염시키지 않기 위함). 답변 생성은 3단계에서 채운다.
+※ 3단계 Q&A 답변 생성(LLM 호출)은 QA_ENABLED=1 일 때만 활성화되며, 기본은 침묵한다
+   (오답으로 실제 글 스레드를 오염시키지 않기 위함). 답변은 헤드리스 `claude -p`로 해당 archive 전문만
+   근거로 생성하고(웹검색 등 도구 미사용), 출처를 포함해 스레드에 비동기 회신한다(D4·D9).
 
 실행: python bot/server.py   (사전: pip install -r bot/requirements.txt, .env 에 토큰 설정)
 """
@@ -24,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import threading
@@ -133,6 +135,44 @@ def find_archive_for_thread(thread_ts: str) -> str | None:
     return None
 
 
+def _report_title(path: str) -> str:
+    """보고서 첫 '# 제목' 줄을 라벨로. 없으면 파일명."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("# "):
+                    return line[2:].strip()
+    except OSError:
+        pass
+    return os.path.basename(path)
+
+
+def active_archives(limit: int = 10) -> list[tuple[str, str]]:
+    """최근 ARCHIVE_ACTIVE_MONTHS(D24) 내 승인·게시된 보고서 (title, path) 목록, 최신순.
+
+    채널 레벨 질문의 그라운딩 후보. 비용·지연을 묶기 위해 최신 limit 건으로 제한한다.
+    """
+    months = int(os.environ.get("ARCHIVE_ACTIVE_MONTHS", "6"))
+    cutoff = datetime.now() - timedelta(days=30 * months)
+    items: list[tuple[datetime, str]] = []
+    for entry in load_run_index().values():
+        if not (entry.get("approved") and entry.get("status") == "approved"):
+            continue
+        path = entry.get("archive", "")
+        base = os.path.basename(path)
+        try:  # 파일명 앞 10자리(YYYY-MM-DD)로 활성 기간 판정(D24)
+            dt = datetime.strptime(base[:10], "%Y-%m-%d")
+        except ValueError:
+            dt = datetime.min
+        if dt != datetime.min and dt < cutoff:
+            continue
+        full = _abs_archive(path)
+        if os.path.exists(full):
+            items.append((dt, full))
+    items.sort(key=lambda x: x[0], reverse=True)
+    return [(_report_title(p), p) for _, p in items[:limit]]
+
+
 def read_report(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
@@ -223,34 +263,239 @@ def handle_reject(ack, body, client):
     )
 
 
-# ── 3단계: 스레드 Q&A (D4·D9) — QA_ENABLED=1 일 때만 활성 ────────────────
+# ── 3단계: Q&A (D4·D9) — QA_ENABLED=1 일 때만 활성 ──────────────────────
+# 두 경로를 모두 지원:
+#   (1) 게시된 글 스레드 질문 → 그 글만 근거(정밀 바인딩, D9).
+#   (2) 채널에 직접 올린 질문 → 활성 보고서 전체에서 관련 글을 찾아 답(슬랙 미숙 사용자 배려).
+#       (2)의 답변은 스레드+채널 동시 노출(reply_broadcast)로 비전문 사용자도 바로 보게 한다.
 def _qa_enabled() -> bool:
     return os.environ.get("QA_ENABLED", "").lower() in ("1", "true", "yes")
 
 
+def _qa_channels() -> set[str]:
+    """채널 레벨(스레드 아님) 질문을 받을 채널 ID 집합.
+    QA_CHANNELS(쉼표) 미설정 시 본 게시 대상인 exec-team 채널을 기본 허용."""
+    chans = {c.strip() for c in os.environ.get("QA_CHANNELS", "").split(",") if c.strip()}
+    if not chans:
+        exec_ch = resolve_alias_channel("exec-team")
+        if exec_ch:
+            chans.add(exec_ch)
+    return chans
+
+
+# app_mention 과 message 이벤트가 같은 메시지에 모두 발화할 수 있어 (channel,ts)로 1회만 처리.
+_qa_seen: set[str] = set()
+_qa_lock = threading.Lock()
+
+
+def _seen_once(channel: str, ts: str) -> bool:
+    """(channel,ts) 이벤트를 이미 처리했으면 True. 메모리 누수 방지로 상한 초과 시 비운다."""
+    key = f"{channel}:{ts}"
+    with _qa_lock:
+        if key in _qa_seen:
+            return True
+        _qa_seen.add(key)
+        if len(_qa_seen) > 1000:
+            _qa_seen.clear()
+        return False
+
+
+# 채널 레벨 오발 방지용 질문 신호 — 물음표 또는 의문 키워드(한/영). 멘션·스레드엔 적용 안 함.
+_Q_HINTS = ("?", "？", "까", "나요", "인가요", "무엇", "뭐", "뭔", "어디", "언제", "얼마",
+            "왜", "어떻게", "어떤", "무슨", "몇", "알려", "궁금", "가능", "있나", "있어",
+            "되나", "될까", "무어", "what", "when", "where", "why", "how", "who", "which")
+
+
+def _looks_like_question(text: str) -> bool:
+    t = (text or "").lower()
+    return any(h in t for h in _Q_HINTS)
+
+
 @app.event("app_mention")
-def handle_mention(event, say):
-    if _qa_enabled():
-        _answer_question(event, say)
+def handle_mention(event, client, logger):
+    if _qa_enabled():  # 멘션은 명시적 의도 → 질문 휴리스틱 생략
+        _answer_question(event, client, logger)
 
 
 @app.event("message")
-def handle_message(event, say):
-    # 스레드 답글(thread_ts 존재)만 Q&A 후보. 봇 자신/일반 채팅은 무시.
-    if event.get("bot_id") or not event.get("thread_ts"):
-        return
-    if _qa_enabled():
-        _answer_question(event, say)
+def handle_message(event, client, logger):
+    if event.get("bot_id") or event.get("subtype") or not _qa_enabled():
+        return  # 봇 자신/편집·삭제(subtype)/Q&A 비활성은 무시
+    if event.get("thread_ts"):
+        _answer_question(event, client, logger)                 # (1) 스레드 답글
+    elif event.get("channel") in _qa_channels() and _looks_like_question(event.get("text", "")):
+        _answer_question(event, client, logger)                 # (2) 허용 채널의 채널 레벨 질문
 
 
-def _answer_question(event: dict, say) -> None:
+def _clean_question(text: str) -> str:
+    """슬랙 멘션 토큰(<@U…>)을 제거하고 질문 본문만 남긴다."""
+    return re.sub(r"<@[^>]+>", "", text or "").strip()
+
+
+def _answer_question(event: dict, client, logger) -> None:
     thread_ts = event.get("thread_ts") or event.get("ts")
-    archive_path = find_archive_for_thread(thread_ts)
-    if not archive_path:
-        return  # 근거 없는(미승인) 스레드는 침묵 — 바인딩된 글 스레드만 응답
-    # TODO(3단계): read_report(archive_path) 본문+📎출처를 근거로 LLM 답변 생성 → 출처 포함 회신.
-    #              답변에도 반드시 원문 링크 포함. 현재는 골격 회신.
-    say(text="(3단계 준비 중) 이 기사 근거로 출처 포함 답변을 회신하도록 구현 예정.", thread_ts=thread_ts)
+    channel = event.get("channel", "")
+    if _seen_once(channel, event.get("ts", "")):
+        return
+    question = _clean_question(event.get("text", ""))
+    if not question:
+        return
+    # 그라운딩 선택: 스레드가 특정 글에 바인딩되면 그 글만(정밀, D9),
+    # 아니면(채널 레벨·비바인딩 스레드) 활성 보고서 전체에서 관련 글을 찾아 답한다.
+    bound = find_archive_for_thread(thread_ts)
+    if bound:
+        reports = [bound]
+    else:
+        reports = [p for _, p in active_archives()]
+        if not reports:
+            return  # 근거 보고서가 없으면 침묵
+    broadcast = not event.get("thread_ts")  # 채널 레벨 질문은 채널에도 보이게(reply_broadcast)
+    threading.Thread(
+        target=_qa_work,
+        args=(client, channel, thread_ts, reports, question, broadcast, logger),
+        daemon=True,
+    ).start()
+
+
+_QA_PROMPT = """당신은 사내 보고서에 대한 슬랙 질문에 답하는 어시스턴트입니다.
+아래 [보고서] 전문만을 근거로 [질문]에 한국어로 답하세요. 웹 검색 등 도구는 쓰지 말고 보고서 내용만 사용합니다.
+
+규칙:
+- 보고서에 적힌 사실·수치·날짜만 사용하고, 없는 내용은 추측하지 않는다.
+- 경영진 대상이므로 결론을 먼저, 전체 3~6줄로 간결히 답한다.
+- 핵심 수치·발효일은 보고서 표기 그대로 인용한다.
+- 답변 끝에 한 줄로 근거 출처를 보고서 📎출처의 [번호]·URL로 표기한다(예: 출처 [2] https://...).
+- 보고서로 답할 수 없으면 다른 말 없이 정확히 `__NO_REPORT_ANSWER__` 한 줄만 출력한다(설명·추측 금지).
+- 슬랙 메시지이므로 인사·머리말 없이 답만 출력한다.
+
+[보고서]
+{report}
+
+[질문]
+{question}
+"""
+
+_QA_PROMPT_MULTI = """당신은 사내 보고서들에 대한 슬랙 질문에 답하는 어시스턴트입니다.
+아래 [보고서들] 중 질문과 관련된 보고서를 찾아 그 내용만 근거로 [질문]에 한국어로 답하세요. 웹 검색 등 도구는 쓰지 말고 보고서 내용만 사용합니다.
+
+규칙:
+- 여러 보고서 중 질문에 해당하는 보고서를 골라 그 내용·수치·날짜만 사용하고, 없는 내용은 추측하지 않는다.
+- 경영진 대상이므로 결론을 먼저, 전체 3~6줄로 간결히 답한다.
+- 핵심 수치·발효일은 보고서 표기 그대로 인용한다.
+- 답변 끝에 한 줄로 근거 출처를 해당 보고서 📎출처의 [번호]·URL로 표기한다(예: 출처 [2] https://...).
+- 어느 보고서로도 답할 수 없으면 다른 말 없이 정확히 `__NO_REPORT_ANSWER__` 한 줄만 출력한다(설명·추측 금지).
+- 슬랙 메시지이므로 인사·머리말 없이 답만 출력한다.
+
+[보고서들]
+{reports}
+
+[질문]
+{question}
+"""
+
+# 보고서로 못 답할 때 그라운딩 LLM 이 내보내는 마커 → 봇이 웹 검색 폴백으로 전환.
+_NO_ANSWER = "__NO_REPORT_ANSWER__"
+
+_QA_PROMPT_WEB = """당신은 한국 지엔씨에너지(GNC Energy) 경영진을 돕는 어시스턴트입니다.
+사내 보고서에 없는 질문이므로, 웹 검색을 사용해 [질문]에 한국어로 답하세요.
+
+규칙:
+- 필요하면 웹 검색으로 최신·신뢰할 수 있는 정보를 찾는다.
+- 경영진 대상이므로 결론을 먼저, 전체 3~6줄로 간결히 답한다.
+- 핵심 수치·날짜에는 가능하면 출처(기관/매체)와 URL을 한 줄로 덧붙인다.
+- 확실하지 않으면 불확실하다고 밝힌다. 추측을 사실처럼 적지 않는다.
+- 슬랙 메시지이므로 인사·머리말 없이 답만 출력한다.
+
+[질문]
+{question}
+"""
+
+
+def _web_fallback_enabled() -> bool:
+    """보고서로 못 답할 때 웹 검색 폴백 사용 여부(기본 on). QA_WEB_FALLBACK=0 으로 끔."""
+    return os.environ.get("QA_WEB_FALLBACK", "1").strip().lower() not in ("0", "false", "no")
+
+
+def _run_claude(prompt: str, timeout: int | None = None) -> str:
+    """헤드리스 `claude -p`로 답변 생성(스케줄러·트리거와 동일 런타임 — 새 의존성/API키 불필요)."""
+    cmd = [CLAUDE_BIN, "-p", prompt, "--dangerously-skip-permissions"]
+    model = os.environ.get("QA_MODEL", "").strip()
+    if model:  # 비용·지연을 낮추려면 .env 의 QA_MODEL 로 더 가벼운 모델 지정 가능
+        cmd += ["--model", model]
+    to = timeout if timeout is not None else int(os.environ.get("QA_TIMEOUT", "180"))
+    r = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=to)
+    if r.returncode != 0:
+        raise RuntimeError(f"claude -p 실패(code {r.returncode}): {(r.stderr or '')[:300]}")
+    return (r.stdout or "").strip()
+
+
+def _generate_answer(report_paths: list[str], question: str) -> str:
+    """보고서 1개면 단일 근거, 여러 개면 관련 글을 골라 답한다. 못 답하면 _NO_ANSWER 마커 반환."""
+    if len(report_paths) == 1:
+        return _run_claude(_QA_PROMPT.format(report=read_report(report_paths[0]), question=question))
+    blocks = [f"===== 보고서 {i}: {_report_title(p)} =====\n{read_report(p)}"
+              for i, p in enumerate(report_paths, 1)]
+    return _run_claude(_QA_PROMPT_MULTI.format(reports="\n\n".join(blocks), question=question))
+
+
+def _web_answer(question: str) -> str:
+    """보고서에 없는 질문 — 웹 검색 기반 일반 답변(라벨은 호출부에서 부착). 웹은 더 오래 걸려 타임아웃 여유."""
+    timeout = int(os.environ.get("QA_WEB_TIMEOUT", "300"))
+    return _run_claude(_QA_PROMPT_WEB.format(question=question), timeout=timeout)
+
+
+def _qa_work(client, channel: str, thread_ts: str, report_paths: list[str],
+             question: str, broadcast: bool, logger) -> None:
+    """진행 표시 게시 → 답변 생성 → 같은 메시지를 답변으로 갱신. 실패 시 운영자 알림(D19).
+
+    broadcast=True(채널 레벨 질문)면 스레드 답변을 채널에도 노출(reply_broadcast) — 슬랙 미숙 사용자 배려."""
+    extra = {"reply_broadcast": True} if broadcast else {}
+    placeholder_ts = None
+    try:
+        ph = client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text="💬 게시된 보고서를 근거로 답변을 작성하는 중입니다…", **extra,
+        )
+        placeholder_ts = ph["ts"]
+    except Exception:  # noqa: BLE001 — 진행 표시는 실패해도 본 답변 생성은 계속
+        logger.exception("Q&A 진행 표시 게시 실패")
+
+    def _set_progress(text: str) -> None:
+        if placeholder_ts:
+            try:
+                client.chat_update(channel=channel, ts=placeholder_ts, text=text)
+            except Exception:  # noqa: BLE001
+                pass
+
+    # 1) 보고서 그라운딩 답변 (못 답하면 _NO_ANSWER 마커)
+    answer = None
+    try:
+        grounded = _generate_answer(report_paths, question)
+        if grounded and _NO_ANSWER not in grounded:
+            answer = grounded
+    except Exception as e:  # noqa: BLE001
+        logger.exception("Q&A 보고서 답변 생성 실패")
+        _notify_ops(client, f"Q&A 보고서 답변 실패: thread={thread_ts} — {e}")
+
+    # 2) 보고서로 못 답하면 웹 검색 폴백 → 출처가 보고서가 아님을 명확히 라벨링
+    if answer is None and _web_fallback_enabled():
+        _set_progress("🔎 보고서에 없는 내용이라 웹에서 찾아보는 중입니다…")
+        try:
+            web = _web_answer(question)
+            if web:
+                answer = ("🔎 *보고서에 없는 내용 — Claude 웹 검색 기반 답변입니다* "
+                          "_(사내 보고서로 검증된 내용 아님)_\n\n" + web)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Q&A 웹 폴백 실패")
+            _notify_ops(client, f"Q&A 웹 폴백 실패: thread={thread_ts} — {e}")
+
+    if answer is None:
+        answer = "⚠️ 지금은 답변을 생성하지 못했습니다. 잠시 후 다시 질문해 주세요."
+
+    if placeholder_ts:
+        client.chat_update(channel=channel, ts=placeholder_ts, text=answer)
+    else:
+        client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=answer, **extra)
 
 
 def _notify_ops(client, msg: str) -> None:

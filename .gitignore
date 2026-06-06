@@ -27,3 +27,7 @@ runs/*
 
 # 봇 런타임 상태 — run_id↔게시 메시지 매핑(채널ID·ts 등 머신별 상태, D9)
 archive/run-index.json
+
+# 정기 실행 로그 (launchd / run_topics.sh)
+logs/
+bot.log

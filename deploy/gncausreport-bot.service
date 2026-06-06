@@ -16,6 +16,8 @@ RestartSec=5
 Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
 # HOME 명시 — claude 가 ~/.claude.json(MCP 등록) 과 자격증명을 찾는 경로.
 Environment=HOME=/home/ubuntu
+# 파이썬 stdout 버퍼링 해제 — print 로그가 즉시 journald 에 보이도록(관측성).
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target

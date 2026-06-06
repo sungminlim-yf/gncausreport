@@ -26,11 +26,16 @@ _LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
 _BOLD = re.compile(r"\*\*([^*\n]+)\*\*")
 # 문장 종결 마침표 뒤 줄바꿈(가독성): 한글 음절·')'·']' 뒤의 '. '만 분리.
 # → 소수점(6.27, 공백 없음)·번호목록(1. , 숫자 뒤)·약어(No. 1, 라틴 글자 뒤)는 건드리지 않음.
-_SENT_END = re.compile(r"(?<=[가-힣\)\]])\.[ \t]+")
+# → 뒤따르는 인용 '[n]'은 앞 문장에 붙여 둔다(끊으면 출처만 별도 줄로 떨어져 닷이 붙음).
+_SENT_END = re.compile(r"(?<=[가-힣\)\]])\.[ \t]+(?!\[)")
 
 # 본문 문단 들여쓰기 — 헤더 아래 종속 문단임을 시각화(2칸). 닷·화살표·번호목록 등 본문 줄 전체에 적용.
-_INDENT = "  "
+# 일반 공백 대신 non-breaking space(U+00A0): 슬랙은 section 블록 '첫 줄'의 선행 ASCII 공백만
+# 잘라내 첫 줄 들여쓰기가 어긋난다 → nbsp 는 잘리지 않아 모든 줄(첫 줄 포함)이 동일 정렬된다.
+_INDENT = "  "
 _DOT = _INDENT + "• "   # 닷포인트(들여쓰기 + 불릿). 본문 문장·불릿 공용.
+# 통째로 굵은 한 줄(예 '*3줄 요약*') = 라벨 → 닷 없이 라벨로 표시.
+_WHOLE_BOLD = re.compile(r"^\*[^*]+\*$")
 # 닷을 붙이지 않는 '마커 줄': 화살표(시사점) · 동그라미숫자(사례) 로 시작.
 _ARROWS = ("→", "⇒", "➔", "➜", "▶", "►", "↳", "⤷", "=>")
 _CIRCLED = set("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳")
@@ -99,7 +104,9 @@ def _dot_points(text: str) -> str:
             continue
         starred = s.startswith("*")
         core = s[1:].lstrip() if starred else s  # 굵게(*..)로 시작하면 안쪽을 기준으로 판정
-        if (starred and _NUMHEAD.match(core)) or s.startswith(">"):
+        if _WHOLE_BOLD.match(s):
+            out.append(s)                                   # 통째 굵은 라벨('*3줄 요약*') → 닷 없이 라벨로
+        elif (starred and _NUMHEAD.match(core)) or s.startswith(">"):
             out.append(s)                                   # 헤더·블록인용 → base
         elif s.startswith("•"):
             out.append(_DOT + s[1:].lstrip())               # 기존 불릿 → 들여쓰기 정규화

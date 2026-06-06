@@ -24,6 +24,9 @@ import re
 
 _LINK = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
 _BOLD = re.compile(r"\*\*([^*\n]+)\*\*")
+# 문장 종결 마침표 뒤 줄바꿈(가독성): 한글 음절·')'·']' 뒤의 '. '만 분리.
+# → 소수점(6.27, 공백 없음)·번호목록(1. , 숫자 뒤)·약어(No. 1, 라틴 글자 뒤)는 건드리지 않음.
+_SENT_END = re.compile(r"(?<=[가-힣\)\]])\.[ \t]+")
 
 SECTION_LIMIT = 2900   # section/context mrkdwn 안전 한도(<3000)
 HEADER_LIMIT = 150
@@ -46,6 +49,12 @@ def to_mrkdwn(text: str) -> str:
 def _plain(text: str) -> str:
     """header용 평문 — 마크다운 강조 기호 제거."""
     return text.replace("**", "").replace("*", "").strip()
+
+
+def _sentence_breaks(text: str) -> str:
+    """문장 종결 마침표 뒤에 줄바꿈을 넣어 '한 문장 = 한 줄' 가독성 향상.
+    소수점·번호목록·약어(No.)는 보존(_SENT_END 가 한글/괄호/대괄호 뒤만 매칭)."""
+    return _SENT_END.sub(".\n", text)
 
 
 def _split_text(text: str, limit: int = SECTION_LIMIT) -> list[str]:
@@ -90,7 +99,7 @@ def render_blocks(report: str) -> list[dict]:
     def flush_body() -> None:
         if not para:
             return
-        txt = to_mrkdwn("\n".join(para)).strip()
+        txt = _sentence_breaks(to_mrkdwn("\n".join(para)).strip())
         para.clear()
         for piece in _split_text(txt):
             if piece.strip():

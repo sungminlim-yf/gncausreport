@@ -1,0 +1,41 @@
+# 슬랙 앱 manifest — 새 워크스페이스로 이전 시 사용.
+# api.slack.com/apps → Create New App → "From an app manifest" → 새 워크스페이스 선택 → 아래 붙여넣기.
+# 생성 후: ① Install to Workspace(→ Bot Token xoxb) ② Basic Information → App-Level Tokens 에서
+#   connections:write 토큰 생성(→ App Token xapp) ③ 두 토큰을 새 .env 에 기입.
+# (Socket Mode 라 Request URL·공개 HTTPS 불필요. 슬래시명령/이벤트 URL 칸도 비워둠.)
+display_information:
+  name: GNC Report Bot
+  description: 호주 시장 정보 보고서 게시·승인·Q&A 봇
+features:
+  bot_user:
+    display_name: gnc-report          # 봇 표시 이름(자유롭게 변경 가능 — 코드는 ID로 식별)
+    always_online: true
+  slash_commands:
+    - command: /gnc
+      description: GNC 리포트 봇
+      usage_hint: brief <주제> | topics | topic add … | topic rm <n>
+      should_escape: false
+    - command: /지엔씨
+      description: GNC 리포트 봇(한글)
+      usage_hint: 조사 <주제> | 주제 | 주제 추가 … | 주제 삭제 <번호>
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write           # 게시·회신(필수)
+      - chat:write.public    # 미가입 공개 채널에도 게시(선택)
+      - channels:history     # 공개 채널 스레드·채널 질문 수신(Q&A)
+      - groups:history       # 비공개 채널 스레드·채널 질문 수신(Q&A)
+      - app_mentions:read    # 봇 멘션 수신
+      - commands             # /gnc·/지엔씨 슬래시 명령
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+  interactivity:
+    is_enabled: true         # 승인/반려 버튼(Block Kit) 동작에 필요
+  socket_mode_enabled: true  # 아웃바운드 WebSocket — 공개 HTTPS 불필요(D13)
+  org_deploy_enabled: false
+  token_rotation_enabled: false

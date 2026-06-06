@@ -11,3 +11,9 @@
 | 2026-06-06 | 호주 건기식 규제 변화 | TGA — Update to listed medicine ingredients in December 2025 (NMN approval) | https://www.tga.gov.au/news/regulatory-decision-notices/update-listed-medicine-ingredients-december-2025 |
 | 2026-06-06 | 호주 건기식 규제 변화 | TGA — Consultation: Proposed changes to labelling of medicines supplied in Australia (TGO 91/92 sunset) | https://www.tga.gov.au/resources/consultation/consultation-proposed-changes-labelling-medicines-supplied-australia |
 | 2026-06-06 | 호주 건기식 규제 변화 | TGA — Proposal to remove Andrographis paniculata as a low-risk ingredient | https://www.tga.gov.au/news/media-releases/stakeholders-be-consulted-proposal-remove-andrographis-paniculata-low-risk-ingredient |
+| 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | Mordor — Australia Hyperscale Data Center Market | https://www.mordorintelligence.com/industry-reports/australia-hyperscale-data-center-market |
+| 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | Mordor — Australia Data Center Power Market | https://www.mordorintelligence.com/industry-reports/australia-data-center-power-market |
+| 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | 삼성증권 — 지엔씨에너지(119850) 가스터빈 발전기로 2차 성장기 | https://www.samsungpop.com/common.do?cmd=down&contentType=application%2Fpdf&inlineYn=Y&saveKey=research.pdf&fileName=2010%2F2026050713330148K_02_03.pdf |
+| 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | AEMC — Proposes new grid standards for data centre connections | https://www.aemc.gov.au/news-centre/media-releases/aemc-proposes-new-grid-standards-data-centre-connections |
+| 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | Queensland Govt (DETSI/EPA) — Environmental authorities | https://environment.qld.gov.au/management/activities/non-mining/regulation/environmental-authority |
+| 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | Eneraque — Power Generation & Energy Solutions (입스위치/Rocklea, DC Critical Power) | https://eneraque.com/ |

@@ -11,3 +11,4 @@
 데이터센터 계통연계·전력 규제(AEMC·AEMO) 변화와 일정 | exec-team | shallow
 퀸즐랜드 환경인허가(EPA/ERA)·배출·소음 규제 동향 | exec-team | shallow
 Eneraque 등 호주 DC EPC·전원 파트너·고객(NEXTDC·AirTrunk 등) 동향 | exec-team | shallow
+호주 데이터센터 비상발전기 시장규모, 시장점유율, 상위 브랜드, 상위 업체, 입찰동향, 입찰정보, 업체선정 및 평가 주요기준 | exec-team | medium

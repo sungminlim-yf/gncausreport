@@ -322,19 +322,27 @@ def _run_brief_async(topic: str, channel: str, depth: str, respond) -> None:
     threading.Thread(target=work, daemon=True).start()
 
 
+# 한/영 명령 키워드 (슬랙 슬래시 명령은 `/gnc` 와 `/지엔씨` 둘 다 같은 핸들러로 라우팅)
+_BRIEF_KW = {"brief", "조사", "조사해", "리서치"}
+_TOPICS_KW = {"topics", "topic", "주제"}
+_HELP_KW = {"help", "도움", "도움말", "?"}
+_ADD_KW = {"add", "추가"}
+_RM_KW = {"rm", "remove", "del", "삭제", "제거"}
+_LIST_KW = {"list", "목록", "리스트"}
+
+
 def _gnc_help() -> str:
     return (
-        "*GNC 리포트 봇 명령* (지정 승인자만)\n"
-        "• `/gnc brief <주제>` — 지금 바로 조사 → 스테이징 초안+승인버튼\n"
-        "• `/gnc topics` — 정기 주제 목록\n"
-        "• `/gnc topic add <주제> | <채널> | <depth>` — 주제 추가(채널·depth 생략 시 exec-team/medium)\n"
-        "• `/gnc topic rm <번호>` — 주제 삭제\n"
-        "• `/gnc help` — 도움말"
+        "*GNC 리포트 봇 명령* (지정 승인자만 · 한/영 모두 가능)\n"
+        "• `/지엔씨 조사 <주제>`  (= `/gnc brief <주제>`) — 지금 바로 조사 → 스테이징 초안+승인버튼\n"
+        "• `/지엔씨 주제`  (= `/gnc topics`) — 정기 주제 목록\n"
+        "• `/지엔씨 주제 추가 <주제> | <채널> | <depth>`  (= `topic add`) — 주제 추가(채널·depth 생략 시 exec-team/medium)\n"
+        "• `/지엔씨 주제 삭제 <번호>`  (= `topic rm`) — 주제 삭제\n"
+        "• `/지엔씨 도움`  (= `/gnc help`) — 도움말"
     )
 
 
-@app.command("/gnc")
-def handle_gnc(ack, command, respond):
+def _handle_gnc(ack, command, respond):
     ack()  # 3초 내 즉시 ack (D4)
     user = command.get("user_id", "")
     if not is_approver(user):
@@ -342,34 +350,46 @@ def handle_gnc(ack, command, respond):
         return
 
     text = (command.get("text") or "").strip()
-    parts = text.split(maxsplit=1)
-    sub = parts[0].lower() if parts else "help"
-    rest = parts[1].strip() if len(parts) > 1 else ""
+    tokens = text.split()
+    head = tokens[0].lower() if tokens else "help"
 
-    if sub == "brief":
-        if not rest:
-            respond("사용법: `/gnc brief <주제>` (대상=exec-team, depth=medium)")
+    # 조사 / brief — 첫 토큰 뒤 전체가 주제
+    if head in _BRIEF_KW:
+        topic = text[len(tokens[0]):].strip()
+        if not topic:
+            respond("사용법: `/지엔씨 조사 <주제>` (= `/gnc brief <주제>`)")
             return
-        respond(f"🔎 조사를 시작합니다: *{rest}*\n수 분 뒤 스테이징 채널에 초안+승인버튼이 올라옵니다.")
-        _run_brief_async(rest, "exec-team", "medium", respond)
-    elif sub in ("topics", "topic"):
-        if sub == "topics" or not rest or rest.startswith("list"):
-            respond("📋 현재 정기 주제 (월·수·금 08:00 실행):\n" + topics_list())
-        elif rest.startswith("add "):
-            respond("➕ 주제 추가됨:\n`" + topics_add(rest[4:].strip()) + "`")
-        elif rest.split(maxsplit=1)[0] in ("rm", "remove", "del"):
-            arg = rest.split(maxsplit=1)
+        respond(f"🔎 조사를 시작합니다: *{topic}*\n수 분 뒤 스테이징 채널에 초안+승인버튼이 올라옵니다.")
+        _run_brief_async(topic, "exec-team", "medium", respond)
+        return
+
+    # 주제 / topic — 두 번째 토큰이 하위 동작(추가/삭제/목록)
+    if head in _TOPICS_KW:
+        action = tokens[1].lower() if len(tokens) > 1 else "list"
+        payload = text.split(maxsplit=2)[2].strip() if len(tokens) > 2 else ""
+        if action in _ADD_KW:
+            if not payload:
+                respond("사용법: `/지엔씨 주제 추가 <주제> | <채널> | <depth>` (채널·depth 생략 가능)")
+                return
+            respond("➕ 주제 추가됨:\n`" + topics_add(payload) + "`")
+        elif action in _RM_KW:
             try:
-                n = int(arg[1].strip()) if len(arg) > 1 else 0
+                n = int(payload.split()[0]) if payload else 0
             except ValueError:
-                respond("사용법: `/gnc topic rm <번호>`")
+                respond("사용법: `/지엔씨 주제 삭제 <번호>` — `/지엔씨 주제`로 번호 확인")
                 return
             removed = topics_rm(n)
-            respond(f"🗑️ 삭제됨: `{removed}`" if removed else f"{n}번 주제가 없습니다. `/gnc topics`로 번호 확인.")
-        else:
-            respond("사용법: `/gnc topic list` · `/gnc topic add <주제> | <채널> | <depth>` · `/gnc topic rm <번호>`")
-    else:
-        respond(_gnc_help())
+            respond(f"🗑️ 삭제됨: `{removed}`" if removed else f"{n}번 주제가 없습니다. 먼저 `/지엔씨 주제`로 번호를 확인하세요.")
+        else:  # 목록(기본): list/목록/없음/미인식
+            respond("📋 현재 정기 주제 (월·수·금 08:00 실행):\n" + topics_list())
+        return
+
+    respond(_gnc_help())
+
+
+# 영어·한국어 명령 이름 모두 같은 핸들러로 라우팅
+app.command("/gnc")(_handle_gnc)
+app.command("/지엔씨")(_handle_gnc)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -38,8 +39,13 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")
 RUN_INDEX = os.path.join(ARCHIVE_DIR, "run-index.json")
 TOPICS_FILE = os.path.join(REPO_ROOT, "topics.md")
-# 슬랙에서 즉시 조사 트리거 시 실행할 claude CLI 경로(.env CLAUDE_BIN 으로 덮어쓰기 가능)
-CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/Users/limsungmin/.local/bin/claude")
+# 슬랙에서 즉시 조사 트리거 시 실행할 claude CLI 경로.
+# 우선순위: .env CLAUDE_BIN > PATH 상의 claude > (구) macOS 기본 경로. → Mac·Linux 양쪽 이식 가능.
+CLAUDE_BIN = (
+    os.environ.get("CLAUDE_BIN")
+    or shutil.which("claude")
+    or "/Users/limsungmin/.local/bin/claude"
+)
 
 # 공유 Block Kit 렌더러(레포 루트) — 본 게시도 send.py 와 동일하게 마크다운→블록 렌더링
 sys.path.insert(0, REPO_ROOT)
@@ -186,10 +192,12 @@ def post_report(client, channel: str, text: str) -> dict:
     """
     groups = slack_blocks.chunk_blocks(slack_blocks.render_blocks(text))
     fb = slack_blocks.fallback_text(text)
-    root = client.chat_postMessage(channel=channel, text=fb, blocks=groups[0])
+    root = client.chat_postMessage(channel=channel, text=fb, blocks=groups[0],
+                                   unfurl_links=False, unfurl_media=False)
     root_ts = root["ts"]
     for group in groups[1:]:
-        client.chat_postMessage(channel=root["channel"], text=fb, blocks=group, thread_ts=root_ts)
+        client.chat_postMessage(channel=root["channel"], text=fb, blocks=group, thread_ts=root_ts,
+                                unfurl_links=False, unfurl_media=False)
     return {"channel": root["channel"], "ts": root_ts}
 
 
@@ -454,7 +462,8 @@ def _qa_work(client, channel: str, thread_ts: str, report_paths: list[str],
     try:
         ph = client.chat_postMessage(
             channel=channel, thread_ts=thread_ts,
-            text="💬 게시된 보고서를 근거로 답변을 작성하는 중입니다…", **extra,
+            text="💬 게시된 보고서를 근거로 답변을 작성하는 중입니다…",
+            unfurl_links=False, unfurl_media=False, **extra,
         )
         placeholder_ts = ph["ts"]
     except Exception:  # noqa: BLE001 — 진행 표시는 실패해도 본 답변 생성은 계속
@@ -495,14 +504,16 @@ def _qa_work(client, channel: str, thread_ts: str, report_paths: list[str],
     if placeholder_ts:
         client.chat_update(channel=channel, ts=placeholder_ts, text=answer)
     else:
-        client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=answer, **extra)
+        client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=answer,
+                                unfurl_links=False, unfurl_media=False, **extra)
 
 
 def _notify_ops(client, msg: str) -> None:
     """운영자 채널 알림 (D19)."""
     ch = ops_channel_id()
     if ch:
-        client.chat_postMessage(channel=ch, text=f"[bot] {msg}")
+        client.chat_postMessage(channel=ch, text=f"[bot] {msg}",
+                                unfurl_links=False, unfurl_media=False)
 
 
 # ── 슬랙 제어: 즉시 조사 트리거 + 주제 관리 (/gnc 슬래시 명령) ─────────────

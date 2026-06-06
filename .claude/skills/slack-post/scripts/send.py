@@ -114,7 +114,8 @@ def post_webhook(text: str) -> None:
     if not url:
         die("SLACK_WEBHOOK_URL 미설정(.env).")
     for chunk in split_message(text):
-        _http_post(url, {"text": chunk}, headers={"Content-Type": "application/json"})
+        _http_post(url, {"text": chunk, "unfurl_links": False, "unfurl_media": False},
+                   headers={"Content-Type": "application/json"})
 
 
 def post_webapi(text: str, channel_alias: str, stage: str, run_id: str,
@@ -138,7 +139,10 @@ def post_webapi(text: str, channel_alias: str, stage: str, run_id: str,
         # 초안의 마지막(또는 유일) 그룹에만 승인 버튼을 부착
         if stage == "draft" and is_last:
             blocks = blocks + slack_blocks.approval_action_blocks(run_id)
-        payload = {"channel": channel, "text": fb, "blocks": blocks}
+        payload = {
+            "channel": channel, "text": fb, "blocks": blocks,
+            "unfurl_links": False, "unfurl_media": False,  # 출처 링크 프리뷰(unfurl) 차단
+        }
         body = json.loads(_http_post(SLACK_POST_URL, payload, headers=headers))
         if not body.get("ok"):
             die(f"chat.postMessage 오류: {body.get('error')}")

@@ -8,11 +8,23 @@
 #   MODEL=...  /brief 에 쓸 모델(미지정 시 claude 기본).
 set -uo pipefail
 
-REPO="/Users/limsungmin/Library/CloudStorage/Dropbox/96. dropbox_vsstudio/gncausreport"
-CLAUDE="/Users/limsungmin/.local/bin/claude"
-export PATH="/Users/limsungmin/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# REPO 는 이 스크립트 위치(scripts/)의 상위 = 레포 루트로 자동 산출 → Mac·Linux 어디서나 동작.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# claude CLI 경로: 환경변수 CLAUDE_BIN > PATH 탐색 (~/.local/bin 우선).
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+CLAUDE="${CLAUDE_BIN:-$(command -v claude || true)}"
+[ -n "$CLAUDE" ] || { echo "claude CLI 를 찾을 수 없음 (CLAUDE_BIN 설정 또는 PATH 확인)"; exit 1; }
 
 cd "$REPO" || { echo "repo 경로 없음: $REPO"; exit 1; }
+
+# .env 로드(있으면) — 종량제 API키 사용 시 ANTHROPIC_API_KEY 등을 claude 서브프로세스에 전달.
+# (launchd/cron/수동 실행 모두에서 자급. 주석·빈 줄 무시, KEY=VALUE 만 export.)
+if [ -f "$REPO/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$REPO/.env"
+  set +a
+fi
 mkdir -p "$REPO/logs"
 STAMP="$(date +%Y-%m-%d_%H%M%S)"
 LOG="$REPO/logs/brief_${STAMP}.log"

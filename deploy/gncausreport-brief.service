@@ -1,0 +1,16 @@
+[Unit]
+Description=GNC AU Report 정기 /brief 실행 (oneshot, 타이머가 기동)
+Documentation=file:///home/ubuntu/gncausreport/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/gncausreport
+# run_topics.sh 가 .env 를 자체 로드(ANTHROPIC_API_KEY 포함) 후 topics.md 각 주제로 claude -p "/brief" 실행.
+ExecStart=/bin/bash /home/ubuntu/gncausreport/scripts/run_topics.sh
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/ubuntu
+# 단일 주제 파이프라인이 길 수 있으므로 넉넉히(필요시 조정).
+TimeoutStartSec=3600

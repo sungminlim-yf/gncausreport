@@ -60,3 +60,19 @@
 | 2026-06-06 | 디젤점유율-대안연료-시장구성비 | BIS Research — Why Are Data Centers Switching to HVO for Backup Power (HVO 11.7M·CAGR 10.51%) | https://bisresearch.com/insights/why-are-data-centers-switching-to-hvo-for-backup-power |
 | 2026-06-06 | 디젤점유율-대안연료-시장구성비 | Rolls-Royce mtu / Microsoft — Unlocking the Potential of Low-Carbon Fuels (HVO drop-in 1차) | https://www.mtu-solutions.com/content/dam/mtu/technical-article/2025/unlocking-the-potential-of-low-carbon-fuels/RRPS_MSFT_Unlocking-the-potential-of-lowcarbon-fuels.pdf |
 | 2026-06-06 | 디젤점유율-대안연료-시장구성비 | Data Center Knowledge — BESS Steps Up as a Diesel Alternative (BESS +48% YoY) | https://www.datacenterknowledge.com/energy-power-supply/battery-storage-gains-ground-as-data-centers-seek-diesel-alternatives |
+
+| 2026-06-06 | 호주비상발전기-시장규모-경쟁사(갱신) | MarketsandMarkets — Data Center Generators Market 2026-2031 | https://www.marketsandmarkets.com/Market-Reports/data-center-generators-market-251952865.html |
+| 2026-06-06 | 호주비상발전기-시장규모-경쟁사(갱신) | TIKR.com — Cummins: Record Earnings (발전 7.5B·DC 3.5B·backlog 2028) | https://www.tikr.com/blog/cummins-worst-truck-cycle-in-20-years-still-produced-record-earnings-heres-why |
+| 2026-06-06 | 호주비상발전기-시장규모-경쟁사(갱신) | Investing.com — Caterpillar AI Infrastructure Play (발전 19.1B·backlog 51.2B·DC+44%) | https://www.investing.com/analysis/caterpillar-trades-like-an-ai-infrastructure-play-as-power-sales-surge-200674128 |
+| 2026-06-06 | 호주비상발전기-시장규모-경쟁사(갱신) | IndexBox — Generac Q1 Backlog $700M | https://www.indexbox.io/blog/generac-stock-surges-17-on-strong-q1-earnings-and-raised-2026-guidance/ |
+| 2026-06-06 | 호주비상발전기-시장규모-경쟁사(갱신) | Rolls-Royce/AVK — 5-year guaranteed capacity for emergency power (mtu Series 4000) | https://www.rolls-royce.com/media/press-releases/2025/04-12-2025-rr-and-avk-strengthen-partnership-5-years-of-guaranteed-capacity-for-emergency-power.aspx |
+| 2026-06-06 | 호주비상발전기-시장규모-경쟁사(갱신) | Hunterbrook Media — Generac/Stargate (백업 납기 2년 초과) | https://hntrbrk.com/generac-stargate/ |
+| 2026-06-06 | 호주비상발전기-시장규모-경쟁사(갱신) | Global Market Insights — Standby Generator Sets Market 2026-2035 (31.9B→67.4B·CAGR 8.7%) | https://www.gminsights.com/industry-analysis/standby-generator-sets-market |
+
+| 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | EESS — Registration: Responsible Supplier | https://www.eess.gov.au/registration/registration-responsible-supplier/ |
+| 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | Standards Australia — AS/NZS 3010 Generating sets | https://store.standards.org.au/product/as-nzs-3010-1-2022 |
+| 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | Standards NZ — ISO 8528-5:2022 | https://www.standards.govt.nz/shop/iso-8528-52022 |
+| 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | Standards Australia — AS/NZS 5601.1:2022 Gas installations | https://store.standards.org.au/product/as-nzs-5601-1-2022 |
+| 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | Queensland Legislation — Petroleum and Gas Act 2004 | https://www.legislation.qld.gov.au/view/html/inforce/current/act-2004-025 |
+| 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | NSW Planning — NEXTDC S5 Back-up Generator Requirements | https://majorprojects.planningportal.nsw.gov.au/prweb/PRRestService/mp/01/getContent?AttachRef=SSD-63168959!20240711T064100.540+GMT |
+| 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | Uptime Institute Journal — Fuel system design and reliability | https://journal.uptimeinstitute.com/fuel-system-design-reliability/ |

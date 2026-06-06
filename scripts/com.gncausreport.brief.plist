@@ -11,12 +11,11 @@
         <string>/Users/limsungmin/Library/CloudStorage/Dropbox/96. dropbox_vsstudio/gncausreport/scripts/run_topics.sh</string>
     </array>
 
-    <!-- 월(1)·수(3)·금(5) 08:00 -->
+    <!-- 주 1회: 월(1) 08:00. (주 2회로 늘리려면 목(4) dict 주석 해제) -->
     <key>StartCalendarInterval</key>
     <array>
         <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <!-- <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict> -->
     </array>
 
     <key>RunAtLoad</key>

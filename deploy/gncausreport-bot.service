@@ -1,0 +1,21 @@
+[Unit]
+Description=GNC AU Report Slack bot (Socket Mode, 상시 가동)
+Documentation=file:///home/ubuntu/gncausreport/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/gncausreport
+# 봇은 .env 를 스스로 로드(_load_dotenv)하며, claude -p 서브프로세스는 그 환경(ANTHROPIC_API_KEY 등)을 상속한다.
+ExecStart=/home/ubuntu/gncausreport/.venv/bin/python /home/ubuntu/gncausreport/bot/server.py
+Restart=always
+RestartSec=5
+# claude CLI(~/.local/bin) 를 PATH 에 포함 — shutil.which("claude") 및 서브프로세스용.
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+# HOME 명시 — claude 가 ~/.claude.json(MCP 등록) 과 자격증명을 찾는 경로.
+Environment=HOME=/home/ubuntu
+
+[Install]
+WantedBy=multi-user.target

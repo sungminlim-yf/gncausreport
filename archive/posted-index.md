@@ -76,3 +76,11 @@
 | 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | Queensland Legislation — Petroleum and Gas Act 2004 | https://www.legislation.qld.gov.au/view/html/inforce/current/act-2004-025 |
 | 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | NSW Planning — NEXTDC S5 Back-up Generator Requirements | https://majorprojects.planningportal.nsw.gov.au/prweb/PRRestService/mp/01/getContent?AttachRef=SSD-63168959!20240711T064100.540+GMT |
 | 2026-06-06 | 호주 발전기 인증·표준 DC진입요건 | Uptime Institute Journal — Fuel system design and reliability | https://journal.uptimeinstitute.com/fuel-system-design-reliability/ |
+
+| 2026-06-07 | 호주DC전원생태계-Eneraque파트너십 | Information Age (ACS) — Concern over Australia's most power-hungry data centre (846 diesel gensets) | https://ia.acs.org.au/article/2026/concern-over-australia-s-most-power-hungry-data-centre.html |
+| 2026-06-07 | 호주DC전원생태계-Eneraque파트너십 | Capacity Media — NEXTDC launches A$1.5bn raise (667MW·CapEx A$2.7~3.0bn) | https://capacityglobal.com/news/nextdc-australia-capital-data-centre-rollout/ |
+| 2026-06-07 | 호주DC전원생태계-Eneraque파트너십 | Eneraque (official) — Data Centre Power The EnerVault (2×1000kVA·Cummins+Stamford·70dBA) | https://eneraque.com/data-centre-power-the-enervault/ |
+| 2026-06-07 | 호주DC전원생태계-Eneraque파트너십 | AirTrunk (official) — MEL2 Melbourne 2nd hyperscale campus (354MW·플랫폼 1.2GW+) | https://airtrunk.com/airtrunk-expands-australian-platform-with-a-second-hyperscale-data-centre-campus-in-melbourne/ |
+| 2026-06-07 | 호주DC전원생태계-Eneraque파트너십 | Data Center Dynamics — NextDC seeks partner for 850MW JV in Sydney | https://www.datacenterdynamics.com/en/news/nextdc-seeks-partner-for-850mw-data-center-jv-in-sydney-australia/ |
+| 2026-06-07 | 호주DC전원생태계-Eneraque파트너십 | Data Center Dynamics — AirTrunk to buy planned 1GW site in Western Sydney | https://www.datacenterdynamics.com/en/news/airtrunk-set-to-buy-planned-1gw-data-center-site-in-western-sydney-australia/ |
+| 2026-06-07 | 호주DC전원생태계-Eneraque파트너십 | Eneraque (official) — Power Generation Solution Specialists, Commercial (40년+·브리즈번 제조허브) | https://eneraque.com/commercial/ |

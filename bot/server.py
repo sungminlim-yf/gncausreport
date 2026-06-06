@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import subprocess
 import sys
 import threading
@@ -294,6 +295,23 @@ def topics_add(spec: str) -> str:
     return line
 
 
+def topics_parse(line: str) -> tuple[str, str, str]:
+    """'주제 | 채널 | depth' 한 줄을 (주제, 채널, depth)로 분해(기본 exec-team/medium)."""
+    parts = [p.strip() for p in line.split("|")]
+    topic = parts[0]
+    channel = parts[1] if len(parts) > 1 and parts[1] else "exec-team"
+    depth = parts[2] if len(parts) > 2 and parts[2] else "medium"
+    return topic, channel, depth
+
+
+def topics_random() -> tuple[str, str, str] | None:
+    """등록된 정기 주제 중 하나를 무작위 선정해 (주제, 채널, depth) 반환. 없으면 None."""
+    _, topics = _topic_index()
+    if not topics:
+        return None
+    return topics_parse(random.choice([ln for _, ln in topics]))
+
+
 def topics_rm(n: int) -> str | None:
     lines, topics = _topic_index()
     if n < 1 or n > len(topics):
@@ -335,6 +353,7 @@ def _gnc_help() -> str:
     return (
         "*GNC 리포트 봇 명령* (지정 승인자만 · 한/영 모두 가능)\n"
         "• `/지엔씨 조사 <주제>`  (= `/gnc brief <주제>`) — 지금 바로 조사 → 스테이징 초안+승인버튼\n"
+        "• `/지엔씨 조사`  (주제 생략) — 등록 주제 중 *무작위* 1개 자동 선정해 조사\n"
         "• `/지엔씨 주제`  (= `/gnc topics`) — 정기 주제 목록\n"
         "• `/지엔씨 주제 추가 <주제> | <채널> | <depth>`  (= `topic add`) — 주제 추가(채널·depth 생략 시 exec-team/medium)\n"
         "• `/지엔씨 주제 삭제 <번호>`  (= `topic rm`) — 주제 삭제\n"
@@ -353,11 +372,18 @@ def _handle_gnc(ack, command, respond):
     tokens = text.split()
     head = tokens[0].lower() if tokens else "help"
 
-    # 조사 / brief — 첫 토큰 뒤 전체가 주제
+    # 조사 / brief — 첫 토큰 뒤 전체가 주제. 주제 생략 시 등록된 주제 중 무작위 선정.
     if head in _BRIEF_KW:
         topic = text[len(tokens[0]):].strip()
         if not topic:
-            respond("사용법: `/지엔씨 조사 <주제>` (= `/gnc brief <주제>`)")
+            picked = topics_random()
+            if not picked:
+                respond("등록된 정기 주제가 없습니다. 먼저 `/지엔씨 주제 추가 <주제>`로 추가하세요.")
+                return
+            topic, channel, depth = picked
+            respond(f"🎲 등록 주제 중 무작위 선정: *{topic}* _(채널 {channel} · depth {depth})_\n"
+                    "조사를 시작합니다 — 수 분 뒤 스테이징 채널에 초안+승인버튼.")
+            _run_brief_async(topic, channel, depth, respond)
             return
         respond(f"🔎 조사를 시작합니다: *{topic}*\n수 분 뒤 스테이징 채널에 초안+승인버튼이 올라옵니다.")
         _run_brief_async(topic, "exec-team", "medium", respond)

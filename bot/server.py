@@ -32,6 +32,9 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")
 RUN_INDEX = os.path.join(ARCHIVE_DIR, "run-index.json")
 
+# 슬랙 단일 메시지 권장 한도(보수적). send.py 의 split_message 와 동일 규칙(D10).
+MAX_CHARS = 2900
+
 
 def _load_dotenv() -> None:
     """.env 를 가볍게 로드(외부 의존성 없이). 이미 설정된 환경변수는 덮어쓰지 않음."""
@@ -127,6 +130,36 @@ def read_report(path: str) -> str:
         return f.read()
 
 
+def split_message(text: str, limit: int = MAX_CHARS) -> list[str]:
+    """긴 보고서를 문단 경계로 분할(D10). send.py 와 동일 규칙(슬랙 임의 자동분할 방지)."""
+    if len(text) <= limit:
+        return [text]
+    chunks, buf = [], ""
+    for para in text.split("\n\n"):
+        if len(buf) + len(para) + 2 > limit and buf:
+            chunks.append(buf.rstrip())
+            buf = ""
+        buf += para + "\n\n"
+    if buf.strip():
+        chunks.append(buf.rstrip())
+    return chunks
+
+
+def post_report(client, channel: str, text: str) -> dict:
+    """보고서를 깨끗한 청크로 분할해 게시한다.
+
+    첫 청크는 채널 top-level 로, 나머지는 첫 메시지 스레드에 묶는다 → 채널엔 글 하나만
+    보이고 본문 전체는 그 스레드에 담긴다. 첫 메시지 ts 가 3단계 Q&A 스레드 루트(D9)다.
+    반환: 첫(루트) 메시지의 {channel, ts}.
+    """
+    chunks = split_message(text)
+    root = client.chat_postMessage(channel=channel, text=chunks[0])
+    root_ts = root["ts"]
+    for chunk in chunks[1:]:
+        client.chat_postMessage(channel=root["channel"], text=chunk, thread_ts=root_ts)
+    return {"channel": root["channel"], "ts": root_ts}
+
+
 # ── 2단계: 승인/반려 버튼 (D2·D5·D17) ──────────────────────────────────
 @app.action("approve_post")
 def handle_approve(ack, body, client, logger):
@@ -157,8 +190,8 @@ def handle_approve(ack, body, client, logger):
                                   text=f"⚠️ 대상 채널({target_alias})이 .env에 설정되지 않았습니다.")
         return
 
-    # 대상 채널에 본 게시 → 게시 메시지 ts 가 3단계 Q&A 스레드 루트가 된다(D9)
-    posted = client.chat_postMessage(channel=target, text=read_report(archive_path))
+    # 대상 채널에 본 게시(분할·스레드 묶음). 첫 메시지 ts 가 3단계 Q&A 스레드 루트(D9).
+    posted = post_report(client, target, read_report(archive_path))
     entry["approved"] = {"channel": posted["channel"], "ts": posted["ts"], "by": user}
     entry["status"] = "approved"
     idx[run_id] = entry

@@ -10,7 +10,7 @@ Block Kit 블록으로 변환한다. send.py(스테이징 초안)와 bot/server.
   # 제목      → header 블록(큰 굵은 글씨)
   ## 섹션     → divider + section(*굵게*) 블록
   ### 소제목  → section(*굵게*)
-  본문 단락   → section(mrkdwn: *굵게*·<url|텍스트>·• 불릿)
+  본문 단락   → section(mrkdwn: *굵게*·<url|텍스트>). 한 문장=한 줄로 끊고 각 줄 앞에 • 닷포인트(가독성)
   ---         → divider
   📎 출처     → context(작은 회색) 블록
   꼬리 면책   → context 블록
@@ -28,20 +28,34 @@ _BOLD = re.compile(r"\*\*([^*\n]+)\*\*")
 # → 소수점(6.27, 공백 없음)·번호목록(1. , 숫자 뒤)·약어(No. 1, 라틴 글자 뒤)는 건드리지 않음.
 _SENT_END = re.compile(r"(?<=[가-힣\)\]])\.[ \t]+")
 
+# 닷포인트 1칸 들여쓰기(헤더 대비 한 단위). 본문 문장·불릿 공용.
+_DOT = " • "
+# 닷을 붙이지 않는 '마커 줄': 화살표(시사점) · 동그라미숫자(사례) 로 시작.
+_ARROWS = ("→", "⇒", "➔", "➜", "▶", "►", "↳", "⤷", "=>")
+_CIRCLED = set("①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳")
+_NUMHEAD = re.compile(r"^\d+\.\s")          # 번호 헤더·목록(1. , 2. …)
+# 본문 인용 [1]/[12] → 위첨자 ⁽¹⁾(작게, 읽기 흐름 방해 최소화). 출처 목록의 [n] 은 유지.
+_CITE = re.compile(r"\[(\d+)\]")
+_SUP = {"0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+        "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹"}
+# 출처 줄에서 '[n] … URL' → '[n] URL'(제목·설명 생략, 링크만).
+_SRC_TAG = re.compile(r"^\s*(\[\d+\])")
+_URL = re.compile(r"https?://\S+")
+
 SECTION_LIMIT = 2900   # section/context mrkdwn 안전 한도(<3000)
 HEADER_LIMIT = 150
 MAX_BLOCKS = 45        # 메시지당 블록 안전 한도(<50)
 
 
 def to_mrkdwn(text: str) -> str:
-    """마크다운 인라인 → 슬랙 mrkdwn. [t](u)→<u|t>, **굵게**→*굵게*, '- '→'• '."""
+    """마크다운 인라인 → 슬랙 mrkdwn. [t](u)→<u|t>, **굵게**→*굵게*, '- '→' • '(1칸 들여쓰기)."""
     text = _LINK.sub(r"<\2|\1>", text)
     text = _BOLD.sub(r"*\1*", text)
     out = []
     for ln in text.split("\n"):
         m = re.match(r"^(\s*)-\s+(.*)", ln)
         if m:
-            ln = m.group(1) + "• " + m.group(2)
+            ln = m.group(1) + _DOT + m.group(2)
         out.append(ln)
     return "\n".join(out)
 
@@ -55,6 +69,38 @@ def _sentence_breaks(text: str) -> str:
     """문장 종결 마침표 뒤에 줄바꿈을 넣어 '한 문장 = 한 줄' 가독성 향상.
     소수점·번호목록·약어(No.)는 보존(_SENT_END 가 한글/괄호/대괄호 뒤만 매칭)."""
     return _SENT_END.sub(".\n", text)
+
+
+def _small_citations(text: str) -> str:
+    """본문 인용 [1]/[12] → 위첨자 ⁽¹⁾(작게). 출처 목록에는 적용하지 않는다."""
+    return _CITE.sub(lambda m: "⁽" + "".join(_SUP[d] for d in m.group(1)) + "⁾", text)
+
+
+def _simplify_source(line: str) -> str:
+    """출처 줄 '[n] 제목 — 설명 (날짜) URL' → '[n] URL'(링크만, 제목 생략)."""
+    tag = _SRC_TAG.match(line)
+    url = _URL.search(line)
+    return f"{tag.group(1)} {url.group(0)}" if tag and url else line
+
+
+def _dot_points(text: str) -> str:
+    """문장 줄바꿈된 본문의 각 줄 앞에 ' • '(1칸 들여쓰기)를 붙여 스캔하기 쉽게 만든다.
+    단, 이미 마커가 있는 줄은 닷을 붙이지 않는다:
+      불릿(•) · 블록인용(>) · 화살표(→ 시사점) · 동그라미숫자(① 사례) · 번호 헤더/목록(1.).
+    (제목류 ### / ## 는 flush_body 를 거치지 않으므로 여기 오지 않는다)"""
+    out = []
+    for ln in text.split("\n"):
+        s = ln.strip()
+        if not s:
+            out.append(ln)
+            continue
+        core = s[1:].lstrip() if s.startswith("*") else s  # 굵게(*..)로 시작하면 안쪽을 기준으로 판정
+        if (s.startswith(("•", ">")) or s.startswith(_ARROWS)
+                or core[:1] in _CIRCLED or _NUMHEAD.match(core)):
+            out.append(ln)
+        else:
+            out.append(_DOT + s)
+    return "\n".join(out)
 
 
 def _split_text(text: str, limit: int = SECTION_LIMIT) -> list[str]:
@@ -99,7 +145,11 @@ def render_blocks(report: str) -> list[dict]:
     def flush_body() -> None:
         if not para:
             return
-        txt = _sentence_breaks(to_mrkdwn("\n".join(para)).strip())
+        # 순서 주의: 문장분리 → 인용 위첨자화 → 닷포인트.
+        # (위첨자화를 먼저 하면 ']' 가 '⁾' 로 바뀌어 '[n]. ' 뒤 문장분리가 안 됨)
+        # strip('\n') 만: 첫 줄의 닷 들여쓰기(맨 앞 공백)를 보존(.strip() 은 그걸 먹음)
+        txt = to_mrkdwn("\n".join(para)).strip("\n")
+        txt = _dot_points(_small_citations(_sentence_breaks(txt)))
         para.clear()
         for piece in _split_text(txt):
             if piece.strip():
@@ -146,7 +196,8 @@ def render_blocks(report: str) -> list[dict]:
     flush_body()
     if src:
         blocks.append(_divider())
-        body = "*📎 출처*\n" + to_mrkdwn("\n".join(src))
+        simplified = [_simplify_source(ln) for ln in src]   # 제목 생략, [n] URL 만
+        body = "*📎 출처*\n" + to_mrkdwn("\n".join(simplified))
         for piece in _split_text(body):
             blocks.append(_context(piece))
     if foot:

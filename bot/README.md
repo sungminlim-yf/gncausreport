@@ -79,6 +79,27 @@ python3 -m venv .venv
 
 ---
 
+## 슬랙에서 직접 제어 — `/gnc` 슬래시 명령 (모바일 OK)
+
+봇이 떠 있으면 슬랙(모바일 포함)에서 조사 트리거·주제 관리를 직접 할 수 있다. 지정 승인자(D17)만 사용 가능.
+
+```
+/gnc brief <주제>                      지금 바로 조사 → 스테이징 초안+승인버튼
+/gnc topics                            정기 주제 목록(월·수·금 08:00 실행 대상)
+/gnc topic add <주제> | <채널> | <depth>   주제 추가(채널·depth 생략 시 exec-team/medium)
+/gnc topic rm <번호>                   주제 삭제
+/gnc help                              도움말
+```
+
+### 슬래시 명령 등록 (1회, 앱 설정)
+1. https://api.slack.com/apps → 앱 → **Features → Slash Commands → Create New Command**
+2. Command: `/gnc` · Short Description: `GNC 리포트 봇` · Usage Hint: `brief <주제> | topics | topic add … | topic rm <n>`
+3. **Socket Mode가 켜져 있으면 Request URL은 비워도 된다**(소켓으로 전달). Save.
+4. `commands` 스코프가 추가되며 **앱 재설치(Reinstall)** 안내가 뜨면 진행(토큰 유지).
+
+> 트리거로 만든 초안도 **사람 승인(D2)**을 거쳐야 본 게시된다. 즉시 조사는 헤드리스 `claude -p`를
+> 백그라운드로 실행하므로(스케줄러와 동일 경로) 완료까지 수 분 걸리고, 끝나면 봇이 회신한다.
+
 ## 동작 요약 (코드 ↔ 결정)
 
 | 기능 | 코드 | 결정 |

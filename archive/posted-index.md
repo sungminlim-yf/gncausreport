@@ -17,3 +17,8 @@
 | 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | AEMC — Proposes new grid standards for data centre connections | https://www.aemc.gov.au/news-centre/media-releases/aemc-proposes-new-grid-standards-data-centre-connections |
 | 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | Queensland Govt (DETSI/EPA) — Environmental authorities | https://environment.qld.gov.au/management/activities/non-mining/regulation/environmental-authority |
 | 2026-06-06 | GNC에너지 호주 DC 발전기 진출 | Eneraque — Power Generation & Energy Solutions (입스위치/Rocklea, DC Critical Power) | https://eneraque.com/ |
+| 2026-06-06 | QLD 환경인허가·배출·소음 규제 동향 | FAOLEX(QLD) — Environmental Protection Regulation 2019, Schedule 2 ERA 14 'Electricity generation' | https://faolex.fao.org/docs/pdf/qs190494.pdf |
+| 2026-06-06 | QLD 환경인허가·배출·소음 규제 동향 | Queensland DETSI — Fees and services: ERA 14(1) electricity generation (gas ≥10MW) | https://www.detsi.qld.gov.au/our-department/fees-services?item_id=35718 |
+| 2026-06-06 | QLD 환경인허가·배출·소음 규제 동향 | Queensland Government — Air quality management policies (EP (Air) Policy 2019 + Air Amendment Policy 2024) | https://www.qld.gov.au/environment/management/monitoring/air/air-quality-policies |
+| 2026-06-06 | QLD 환경인허가·배출·소음 규제 동향 | Queensland Government — Noise regulation under the Environmental Protection Act 1994 (PDF) | https://www.qld.gov.au/__data/assets/pdf_file/0020/202457/noise-regulation.pdf |
+| 2026-06-06 | QLD 환경인허가·배출·소음 규제 동향 | Ashurst — Queensland environmental reform continues (EP Efficiency and Streamlining Bill 2025) | https://www.ashurst.com/en/insights/queensland-environmental-reform-continues/ |

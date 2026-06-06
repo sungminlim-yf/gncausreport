@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
+import threading
 from datetime import datetime, timedelta
 
 from slack_bolt import App
@@ -32,6 +34,9 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")
 RUN_INDEX = os.path.join(ARCHIVE_DIR, "run-index.json")
+TOPICS_FILE = os.path.join(REPO_ROOT, "topics.md")
+# 슬랙에서 즉시 조사 트리거 시 실행할 claude CLI 경로(.env CLAUDE_BIN 으로 덮어쓰기 가능)
+CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/Users/limsungmin/.local/bin/claude")
 
 # 공유 Block Kit 렌더러(레포 루트) — 본 게시도 send.py 와 동일하게 마크다운→블록 렌더링
 sys.path.insert(0, REPO_ROOT)
@@ -252,6 +257,119 @@ def _notify_ops(client, msg: str) -> None:
     ch = ops_channel_id()
     if ch:
         client.chat_postMessage(channel=ch, text=f"[bot] {msg}")
+
+
+# ── 슬랙 제어: 즉시 조사 트리거 + 주제 관리 (/gnc 슬래시 명령) ─────────────
+# 모바일 포함 슬랙에서 직접 파이프라인을 트리거하고 topics.md 를 편집한다.
+# 지정 승인자(D17)만 사용 가능. 본 게시는 여전히 사람 승인을 거친다(D2).
+def _topic_index() -> tuple[list[str], list[tuple[int, str]]]:
+    """topics.md 전체 줄과, 그중 '주제 줄'(주석/블록인용 제외 · '|' 포함)의 (인덱스, 내용)."""
+    lines = open(TOPICS_FILE, "r", encoding="utf-8").read().splitlines()
+    topics = [(i, ln) for i, ln in enumerate(lines)
+              if ln.strip() and not ln.lstrip().startswith(("#", ">")) and "|" in ln]
+    return lines, topics
+
+
+def topics_list() -> str:
+    _, topics = _topic_index()
+    if not topics:
+        return "_(등록된 정기 주제가 없습니다)_"
+    return "\n".join(f"`{n + 1}.` {ln.strip()}" for n, (_, ln) in enumerate(topics))
+
+
+def _normalize_topic(spec: str) -> str:
+    """'주제 | 채널 | depth' 입력을 정규화(채널 기본 exec-team, depth 기본 medium)."""
+    parts = [p.strip() for p in spec.split("|")]
+    topic = parts[0]
+    channel = parts[1] if len(parts) > 1 and parts[1] else "exec-team"
+    depth = parts[2] if len(parts) > 2 and parts[2] else "medium"
+    return f"{topic} | {channel} | {depth}"
+
+
+def topics_add(spec: str) -> str:
+    line = _normalize_topic(spec)
+    lines = open(TOPICS_FILE, "r", encoding="utf-8").read().splitlines()
+    lines.append(line)
+    open(TOPICS_FILE, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    return line
+
+
+def topics_rm(n: int) -> str | None:
+    lines, topics = _topic_index()
+    if n < 1 or n > len(topics):
+        return None
+    idx, content = topics[n - 1]
+    del lines[idx]
+    open(TOPICS_FILE, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    return content.strip()
+
+
+def _run_brief_async(topic: str, channel: str, depth: str, respond) -> None:
+    """헤드리스 /brief 를 백그라운드 스레드에서 실행(스케줄러와 동일 경로). 완료 시 회신."""
+    def work() -> None:
+        prompt = f"/brief {topic} {channel} --depth {depth}"
+        try:
+            r = subprocess.run(
+                [CLAUDE_BIN, "-p", prompt, "--dangerously-skip-permissions"],
+                cwd=REPO_ROOT, capture_output=True, text=True, timeout=1800,
+            )
+            if r.returncode == 0:
+                respond(f"✅ 조사 완료 — 스테이징 채널의 *초안+승인버튼*을 확인하세요: *{topic}*")
+            else:
+                respond(f"⚠️ 조사 실패(코드 {r.returncode}): *{topic}* — 로그를 확인하세요.")
+        except Exception as e:  # noqa: BLE001
+            respond(f"⚠️ 조사 오류: *{topic}* — {e}")
+    threading.Thread(target=work, daemon=True).start()
+
+
+def _gnc_help() -> str:
+    return (
+        "*GNC 리포트 봇 명령* (지정 승인자만)\n"
+        "• `/gnc brief <주제>` — 지금 바로 조사 → 스테이징 초안+승인버튼\n"
+        "• `/gnc topics` — 정기 주제 목록\n"
+        "• `/gnc topic add <주제> | <채널> | <depth>` — 주제 추가(채널·depth 생략 시 exec-team/medium)\n"
+        "• `/gnc topic rm <번호>` — 주제 삭제\n"
+        "• `/gnc help` — 도움말"
+    )
+
+
+@app.command("/gnc")
+def handle_gnc(ack, command, respond):
+    ack()  # 3초 내 즉시 ack (D4)
+    user = command.get("user_id", "")
+    if not is_approver(user):
+        respond("⛔ 권한이 없습니다(지정 승인자만 사용 가능).")
+        return
+
+    text = (command.get("text") or "").strip()
+    parts = text.split(maxsplit=1)
+    sub = parts[0].lower() if parts else "help"
+    rest = parts[1].strip() if len(parts) > 1 else ""
+
+    if sub == "brief":
+        if not rest:
+            respond("사용법: `/gnc brief <주제>` (대상=exec-team, depth=medium)")
+            return
+        respond(f"🔎 조사를 시작합니다: *{rest}*\n수 분 뒤 스테이징 채널에 초안+승인버튼이 올라옵니다.")
+        _run_brief_async(rest, "exec-team", "medium", respond)
+    elif sub in ("topics", "topic"):
+        if sub == "topics" or not rest or rest.startswith("list"):
+            respond("📋 현재 정기 주제 (월·수·금 08:00 실행):\n" + topics_list())
+        elif rest.startswith("add "):
+            respond("➕ 주제 추가됨:\n`" + topics_add(rest[4:].strip()) + "`")
+        elif rest.split(maxsplit=1)[0] in ("rm", "remove", "del"):
+            arg = rest.split(maxsplit=1)
+            try:
+                n = int(arg[1].strip()) if len(arg) > 1 else 0
+            except ValueError:
+                respond("사용법: `/gnc topic rm <번호>`")
+                return
+            removed = topics_rm(n)
+            respond(f"🗑️ 삭제됨: `{removed}`" if removed else f"{n}번 주제가 없습니다. `/gnc topics`로 번호 확인.")
+        else:
+            respond("사용법: `/gnc topic list` · `/gnc topic add <주제> | <채널> | <depth>` · `/gnc topic rm <번호>`")
+    else:
+        respond(_gnc_help())
 
 
 if __name__ == "__main__":

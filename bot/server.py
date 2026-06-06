@@ -31,6 +31,7 @@ import subprocess
 import sys
 import threading
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -535,12 +536,34 @@ def topics_list() -> str:
 
 
 _DAY_KO = {"Mon": "월", "Tue": "화", "Wed": "수", "Thu": "목", "Fri": "금", "Sat": "토", "Sun": "일"}
-_CAL_RE = re.compile(r"OnCalendar=(\S+)\s+\S+\s+(\d{1,2}:\d{2})")
+_WEEKDAY_KO = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+_CAL_RE = re.compile(r"OnCalendar=(\S+)\s")
+_TS_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})")
+_SEOUL = ZoneInfo("Asia/Seoul")
+
+
+def _fmt_seoul(naive_local: str, tzname: str) -> str:
+    """systemd 다음실행 문자열(시스템 tz)을 서울(KST) 기준 직관적 한국어로.
+    예: '월요일 2026년 6월 8일 오전 7시'. 파싱 실패 시 ''."""
+    m = _TS_RE.search(naive_local)
+    if not m:
+        return ""
+    y, mo, d, hh, mm, ss = (int(x) for x in m.groups())
+    try:
+        local = datetime(y, mo, d, hh, mm, ss, tzinfo=ZoneInfo(tzname))
+    except Exception:  # noqa: BLE001
+        return ""
+    s = local.astimezone(_SEOUL)
+    ampm = "오전" if s.hour < 12 else "오후"
+    h12 = s.hour % 12 or 12
+    t = f"{ampm} {h12}시" + (f" {s.minute}분" if s.minute else "")
+    return f"{_WEEKDAY_KO[s.weekday()]} {s.year}년 {s.month}월 {s.day}일 {t}"
 
 
 def schedule_summary() -> str:
     """정기 실행 스케줄을 systemd 타이머에서 *실시간* 조회(하드코딩 금지).
     실제 가동 중인 타이머가 진실의 원천 → 봇 응답과 스케줄이 어긋나지 않는다.
+    요일 cadence + 다음 실행시각(서울/KST 직관 표기)을 돌려준다.
     systemd 미사용 환경(개발 맥 등)·조회 실패 시 빈 문자열 반환(문구 생략)."""
     try:
         cal = subprocess.run(
@@ -549,21 +572,23 @@ def schedule_summary() -> str:
         nxt = subprocess.run(
             ["systemctl", "show", "gncausreport-brief.timer", "-p", "NextElapseUSecRealtime", "--value"],
             capture_output=True, text=True, timeout=5).stdout.strip()
+        tzname = subprocess.run(
+            ["timedatectl", "show", "-p", "Timezone", "--value"],
+            capture_output=True, text=True, timeout=5).stdout.strip() or "Australia/Sydney"
     except Exception:  # noqa: BLE001
         return ""
     days: list[str] = []
-    time_s = ""
-    for spec, t in _CAL_RE.findall(cal):
-        time_s = t
+    for spec in _CAL_RE.findall(cal):
         days.extend(spec.split(","))
     if not days:
         return ""
     order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     uniq = sorted(set(days), key=lambda d: order.index(d) if d in order else 99)
     ko = "·".join(_DAY_KO.get(d, d) for d in uniq)
-    out = f"자동 실행: {ko} {time_s}"
-    if nxt:
-        out += f" · 다음 {nxt}"
+    out = f"{ko} 정기 실행"
+    nxt_ko = _fmt_seoul(nxt, tzname)
+    if nxt_ko:
+        out += f" · 다음 {nxt_ko} (서울)"
     return out
 
 

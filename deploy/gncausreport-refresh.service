@@ -1,0 +1,17 @@
+[Unit]
+Description=GNC AU Report 토요일 자동 주제 갱신 (oneshot, 타이머가 기동)
+Documentation=file:///home/ubuntu/gncausreport/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/gncausreport
+# run_refresh.sh 가 .env 를 자체 로드 후 claude -p "/refresh-topics --weekly --auto" 실행.
+# → topic-curator 로 다음 주 9개 도출 → topics_tool apply-weekly(3·3·3) → 슬랙 통보.
+ExecStart=/bin/bash /home/ubuntu/gncausreport/scripts/run_refresh.sh
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/ubuntu
+# 9개 도출은 길 수 있으므로 넉넉히.
+TimeoutStartSec=2400

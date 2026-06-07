@@ -25,10 +25,11 @@ argument-hint: <주제> <대상채널> [--depth shallow|medium|deep] [--budget <
 
 ## 3. writer (메인 + content-production + audience-fit)
 - 메인 세션이 `content-production`·`audience-fit` 스킬로 `curator.json` 통과 건과 `audience/briefs/<대상채널>.md`를 읽어 **한국어 보고서**를 작성.
+- **`facts.md`(회사 사실/가정)를 읽어 진실로 간주**한다. 외부 자료가 `facts.md`와 충돌하면 **facts를 우선**하고 본문에 "(확인 필요)"로 표기(D3 — 회사 사실 오해 방지).
 - 결과 `runs/<run-id>/draft.md` (제목→3줄요약→본문→📎출처, 핵심 수치 원문 병기 D3, `[번호]` 인용).
 
 ## 4. reviewer (서브에이전트) — 품질 게이트 + 루프(D7)
-- `reviewer` 서브에이전트 호출: `draft.md` 핵심 수치·고위험 주장만 원문 대조(D18) → `review.json`.
+- `reviewer` 서브에이전트 호출: `draft.md` 핵심 수치·고위험 주장만 원문 대조(D18) + **`facts.md`와 회사 관련 주장 대조** → `review.json`.
 - `verdict == fail`이면 **3번(writer)으로 회귀**해 수정 후 재검수.
 - **최대 2~3회**. 그 후에도 `fail`이면 중단하고 미해결 이슈를 표시해 **사람에게 에스컬레이션**(스테이징 채널/운영자 알림).
 

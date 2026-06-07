@@ -4,7 +4,8 @@
 
 ## 왜 VM 한 대인가
 - **봇**(`bot/server.py`, Socket Mode)은 슬랙 버튼 클릭·스레드 Q&A를 받으려고 **24시간 떠 있어야** 한다.
-- **스케줄러**(`scripts/run_topics.sh`)는 주 1회 `claude -p "/brief ..."`로 초안을 게시한다.
+- **정기 조사 스케줄러**(`scripts/run_topics.sh`)는 월·수·금 그날 요일에 배정된 **주제 3건**을 `claude -p "/brief ..."`로 초안 게시한다.
+- **주제 갱신 스케줄러**(`scripts/run_refresh.sh`)는 토요일에 `/refresh-topics --weekly --auto`로 **다음 주 9개 주제를 자동 선정**(Mon·Wed·Fri 3건씩)하고 슬랙 통보한다.
 - 둘은 `archive/run-index.json`(초안↔본게시 바인딩 SSOT)을 **같은 파일시스템으로 공유**한다.
   → 쪼개면 상태 동기화가 깨지므로 **한 VM에 함께** 둔다. (GitHub Actions가 봇을 못 올리는 이유이기도 하다.)
 - Socket Mode는 **아웃바운드 WebSocket**만 쓴다 → 공개 IP·포트개방·도메인 **불필요**.
@@ -13,7 +14,8 @@
 | 구성요소 | 실행 방식 (Mac → 서버) |
 |---|---|
 | 봇 (상시) | launchd 수동기동 → **systemd** `gncausreport-bot.service` (Restart=always) |
-| 스케줄러 (주1회) | launchd 타이머 → **systemd timer** `gncausreport-brief.timer` (월 08:00) |
+| 정기 조사 (주3회) | **systemd timer** `gncausreport-brief.timer` (월·수·금 08:00, 그날 요일 3건) |
+| 주제 갱신 (주1회) | **systemd timer** `gncausreport-refresh.timer` (토 08:00, 다음 주 9건 자동 선정) |
 | Claude 인증 | 구독 로그인 → **종량제 `ANTHROPIC_API_KEY`** (Anthropic Console) |
 | firecrawl MCP | `~/.claude.json`(전역) → 서버에서 `claude mcp add` 재등록 |
 
@@ -54,7 +56,8 @@ scp ".env" ubuntu@<퍼블릭IP>:~/gncausreport/.env
 ```bash
 nano ~/gncausreport/.env     # ANTHROPIC_API_KEY=sk-ant-... 채우기
 ```
-> `sungmindata/`(1차 사업자료)는 런타임에 불필요하다. `/refresh-topics`를 서버에서 돌릴 때만 별도 scp.
+> `sungmindata/`(1차 사업자료)는 **토요일 자동 주제 갱신(`/refresh-topics --weekly --auto`)에 필요**하므로 서버에 scp 해 둔다. (없으면 주제 갱신이 중단됨)
+> 회사 사실/가정은 `facts.md`(git 추적, 운영자 직접 편집)로 관리 — writer·reviewer가 읽어 오해를 차단.
 
 ## 4단계 — 부트스트랩 (멱등)
 ```bash
@@ -66,12 +69,13 @@ bash ~/gncausreport/deploy/setup.sh
 ```bash
 claude -p "say hi"                              # ① API키 인증 OK?
 systemctl status gncausreport-bot --no-pager    # ② 봇 active(running)?
-systemctl list-timers gncausreport-brief        # ③ 다음 실행 예정 시각
+systemctl list-timers 'gncausreport-*'          # ③ 정기 조사·주제 갱신 다음 실행 시각
 journalctl -u gncausreport-bot -f               # ④ 실시간 로그(슬랙에서 /gnc 테스트)
 ```
 - 슬랙에서 **`/gnc`** 또는 **`/지엔씨`** 명령 → 봇 응답 확인.
-- 스케줄러 즉시 테스트(드라이런): `DRY_RUN=1 bash ~/gncausreport/scripts/run_topics.sh`
-- 실제 1회 강제 실행: `sudo systemctl start gncausreport-brief.service` → 스테이징 채널에 초안+승인버튼 확인.
+- 정기 조사 드라이런: `DRY_RUN=1 bash ~/gncausreport/scripts/run_topics.sh` (그날 요일 슬롯만)
+- 주제 갱신 드라이런: `DRY_RUN=1 bash ~/gncausreport/scripts/run_refresh.sh`
+- 실제 1회 강제 실행: `sudo systemctl start gncausreport-brief.service`(조사) / `sudo systemctl start gncausreport-refresh.service`(주제 갱신).
 
 ## 6단계 — 맥의 옛 실행 중단 (이중 게시 방지)
 서버가 정상 확인되면 **맥에서 끈다**:
@@ -87,9 +91,11 @@ launchctl unload ~/Library/LaunchAgents/com.gncausreport.brief.plist 2>/dev/null
 ## 운영 메모
 - **업데이트 배포**: `cd ~/gncausreport && git pull && ./.venv/bin/pip install -r bot/requirements.txt && sudo systemctl restart gncausreport-bot`
 - **봇 재시작**: `sudo systemctl restart gncausreport-bot`
-- **로그**: 봇 `journalctl -u gncausreport-bot`, 스케줄러 `journalctl -u gncausreport-brief` + `~/gncausreport/logs/brief_*.log`
-- **주 2회로 변경**: `gncausreport-brief.timer`에 `OnCalendar=Thu *-*-* 08:00:00` 줄 추가 → `sudo systemctl daemon-reload`
-- **비용 모니터링**: 종량제이므로 Anthropic Console의 Usage에서 토큰 소비 확인. `topics.md` 주제 수 × `BRIEF_DEFAULT_BUDGET`로 1회 상한 관리(.env).
+- **로그**: 봇 `journalctl -u gncausreport-bot`, 정기 조사 `~/gncausreport/logs/brief_*.log`, 주제 갱신 `~/gncausreport/logs/refresh_*.log`
+- **조사 요일 변경**: `gncausreport-brief.timer`의 `OnCalendar=` 줄을 가감 → `sudo systemctl daemon-reload`. (단, 주제 요일 배정은 Mon·Wed·Fri 고정이므로 다른 요일을 추가해도 그날 슬롯이 비어 조사 0건)
+- **주제 갱신 시각 변경**: `gncausreport-refresh.timer`의 `OnCalendar=Sat ...` 수정.
+- **주제 운영**: 토요일 자동 9건 선정. 주중 보충은 슬랙 `/지엔씨 주제갱신`(아직 조사 안 된 슬롯만 교체, 이미 조사된 건 유지). 추가/삭제 명령은 폐지됨.
+- **비용 모니터링**: 종량제이므로 Anthropic Console의 Usage에서 토큰 소비 확인. 주당 9건(월·수·금 3건) × `BRIEF_DEFAULT_BUDGET`로 상한 관리(.env).
 - **firecrawl 확인**: `claude mcp list` → `firecrawl` 보이면 OK.
 
 ## 알아둘 점

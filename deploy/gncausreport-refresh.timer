@@ -1,0 +1,13 @@
+[Unit]
+Description=GNC AU Report 토요일 자동 주제 갱신 타이머 (토 08:00, 시스템 타임존=Australia/Sydney)
+Documentation=file:///home/ubuntu/gncausreport/deploy/README.md
+
+[Timer]
+# 토요일 08:00 시드니(= 한국 토 07:00). 다음 주 월·수·금 정기 실행 전에 9개 주제를 확정.
+# 시스템 타임존 기준이므로 setup.sh 가 timedatectl 로 Australia/Sydney 를 설정한다.
+OnCalendar=Sat *-*-* 08:00:00
+# VM 이 꺼져 있어 놓친 실행은 다음 부팅 시 한 번 따라잡기(주제 공백 방지).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

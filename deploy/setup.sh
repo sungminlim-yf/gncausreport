@@ -41,16 +41,19 @@ else
 fi
 
 echo "[6/6] systemd 유닛 설치 + 기동"
-sudo cp "$REPO/deploy/gncausreport-bot.service"   /etc/systemd/system/
-sudo cp "$REPO/deploy/gncausreport-brief.service" /etc/systemd/system/
-sudo cp "$REPO/deploy/gncausreport-brief.timer"   /etc/systemd/system/
+sudo cp "$REPO/deploy/gncausreport-bot.service"     /etc/systemd/system/
+sudo cp "$REPO/deploy/gncausreport-brief.service"   /etc/systemd/system/
+sudo cp "$REPO/deploy/gncausreport-brief.timer"     /etc/systemd/system/
+sudo cp "$REPO/deploy/gncausreport-refresh.service" /etc/systemd/system/
+sudo cp "$REPO/deploy/gncausreport-refresh.timer"   /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now gncausreport-bot.service
-sudo systemctl enable --now gncausreport-brief.timer
+sudo systemctl enable --now gncausreport-brief.timer      # 월·수·금 08:00 정기 조사(요일별 3건)
+sudo systemctl enable --now gncausreport-refresh.timer    # 토 08:00 다음 주 9개 주제 자동 갱신
 
 echo
 echo "✅ 완료. 다음으로 확인:"
-echo "   claude -p 'say hi'                          # API키 인증 동작 확인"
-echo "   systemctl status gncausreport-bot --no-pager # 봇 가동 상태"
-echo "   systemctl list-timers gncausreport-brief     # 다음 실행 예정 시각"
-echo "   journalctl -u gncausreport-bot -f            # 봇 실시간 로그"
+echo "   claude -p 'say hi'                              # API키 인증 동작 확인"
+echo "   systemctl status gncausreport-bot --no-pager     # 봇 가동 상태"
+echo "   systemctl list-timers 'gncausreport-*'           # 정기 조사·주제 갱신 다음 실행 시각"
+echo "   journalctl -u gncausreport-bot -f                # 봇 실시간 로그"

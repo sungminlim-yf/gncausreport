@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import re
 import shutil
 import subprocess
@@ -39,7 +38,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ARCHIVE_DIR = os.path.join(REPO_ROOT, "archive")
 RUN_INDEX = os.path.join(ARCHIVE_DIR, "run-index.json")
-TOPICS_FILE = os.path.join(REPO_ROOT, "topics.md")
+# topics.md 의 경로·파싱·상태는 scripts/topics_tool.py(tt) 가 단일 관리한다.
 # 슬랙에서 즉시 조사 트리거 시 실행할 claude CLI 경로.
 # 우선순위: .env CLAUDE_BIN > PATH 상의 claude > (구) macOS 기본 경로. → Mac·Linux 양쪽 이식 가능.
 CLAUDE_BIN = (
@@ -51,6 +50,10 @@ CLAUDE_BIN = (
 # 공유 Block Kit 렌더러(레포 루트) — 본 게시도 send.py 와 동일하게 마크다운→블록 렌더링
 sys.path.insert(0, REPO_ROOT)
 import slack_blocks  # noqa: E402
+
+# 주제 계획표(topics.md) 단일 관리 헬퍼 — run_topics.sh 와 공용(파싱·요일·상태 로직 일원화)
+sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
+import topics_tool as tt  # noqa: E402
 
 
 def _load_dotenv() -> None:
@@ -517,22 +520,12 @@ def _notify_ops(client, msg: str) -> None:
                                 unfurl_links=False, unfurl_media=False)
 
 
-# ── 슬랙 제어: 즉시 조사 트리거 + 주제 관리 (/gnc 슬래시 명령) ─────────────
-# 모바일 포함 슬랙에서 직접 파이프라인을 트리거하고 topics.md 를 편집한다.
-# 지정 승인자(D17)만 사용 가능. 본 게시는 여전히 사람 승인을 거친다(D2).
-def _topic_index() -> tuple[list[str], list[tuple[int, str]]]:
-    """topics.md 전체 줄과, 그중 '주제 줄'(주석/블록인용 제외 · '|' 포함)의 (인덱스, 내용)."""
-    lines = open(TOPICS_FILE, "r", encoding="utf-8").read().splitlines()
-    topics = [(i, ln) for i, ln in enumerate(lines)
-              if ln.strip() and not ln.lstrip().startswith(("#", ">")) and "|" in ln]
-    return lines, topics
-
-
+# ── 슬랙 제어: 즉시 조사 트리거 + 주제 보기/갱신 (/gnc 슬래시 명령) ─────────
+# 모바일 포함 슬랙에서 직접 파이프라인을 트리거한다. 주제 추가/삭제는 폐지(주차 자동 선정으로 대체).
+# 본 게시는 여전히 사람 승인을 거친다(D2). topics.md 의 파싱·상태는 topics_tool 이 단일 관리.
 def topics_list() -> str:
-    _, topics = _topic_index()
-    if not topics:
-        return "_(등록된 정기 주제가 없습니다)_"
-    return "\n".join(f"`{n + 1}.` {ln.strip()}" for n, (_, ln) in enumerate(topics))
+    """요일·상태 포함 사람용 목록(슬랙 표시). topics_tool 이 단일 소스."""
+    return tt.cmd_list()
 
 
 _DAY_KO = {"Mon": "월", "Tue": "화", "Wed": "수", "Thu": "목", "Fri": "금", "Sat": "토", "Sun": "일"}
@@ -592,54 +585,17 @@ def schedule_summary() -> str:
     return out
 
 
-def _normalize_topic(spec: str) -> str:
-    """'주제 | 채널 | depth' 입력을 정규화(채널 기본 exec-team, depth 기본 medium)."""
-    parts = [p.strip() for p in spec.split("|")]
-    topic = parts[0]
-    channel = parts[1] if len(parts) > 1 and parts[1] else "exec-team"
-    depth = parts[2] if len(parts) > 2 and parts[2] else "medium"
-    return f"{topic} | {channel} | {depth}"
-
-
-def topics_add(spec: str) -> str:
-    line = _normalize_topic(spec)
-    lines = open(TOPICS_FILE, "r", encoding="utf-8").read().splitlines()
-    lines.append(line)
-    open(TOPICS_FILE, "w", encoding="utf-8").write("\n".join(lines) + "\n")
-    return line
-
-
-def topics_parse(line: str) -> tuple[str, str, str]:
-    """'주제 | 채널 | depth' 한 줄을 (주제, 채널, depth)로 분해(기본 exec-team/medium)."""
-    parts = [p.strip() for p in line.split("|")]
-    topic = parts[0]
-    channel = parts[1] if len(parts) > 1 and parts[1] else "exec-team"
-    depth = parts[2] if len(parts) > 2 and parts[2] else "medium"
-    return topic, channel, depth
-
-
 def topics_random() -> tuple[str, str, str] | None:
-    """등록된 정기 주제 중 하나를 무작위 선정해 (주제, 채널, depth) 반환. 없으면 None."""
-    _, topics = _topic_index()
-    if not topics:
-        return None
-    return topics_parse(random.choice([ln for _, ln in topics]))
-
-
-def topics_rm(n: int) -> str | None:
-    lines, topics = _topic_index()
-    if n < 1 or n > len(topics):
-        return None
-    idx, content = topics[n - 1]
-    del lines[idx]
-    open(TOPICS_FILE, "w", encoding="utf-8").write("\n".join(lines) + "\n")
-    return content.strip()
+    """랜덤 조사용 주제 1건 — 현재 9개 + 과거 이력(topics-history)에서 추출. 없으면 None.
+    이미 지나가 빠진 주제도 풀에 포함된다(운영자 요구 — 지난 주제도 조사 가능)."""
+    e = tt.random_pool()
+    return (e["topic"], e["channel"], e["depth"]) if e else None
 
 
 # ── 일일 조사 트리거 한도(구독 토큰 보호) ────────────────────────────────
 # `/지엔씨 조사`는 멤버 누구나 쓸 수 있고 승인 없이 바로 게시되므로(D2 예외),
-# 무분별 남발로 구독 토큰 한도가 소진되지 않도록 하루 총 N회로 제한한다.
-DAILY_TRIGGER_LIMIT = 30
+# 폭주로 구독 토큰이 한 번에 소진되는 것만 막는 **느슨한 안전 상한**(사실상 무제한 운용).
+DAILY_TRIGGER_LIMIT = 100
 _QUOTA_FILE = os.path.join(os.path.expanduser("~"), ".gncausreport-quota.json")
 _QUOTA_LOCK = threading.Lock()
 
@@ -692,23 +648,39 @@ def _run_brief_async(topic: str, channel: str, depth: str, respond, publish: boo
     threading.Thread(target=work, daemon=True).start()
 
 
+def _run_refresh_async(mode_args: str, respond) -> None:
+    """헤드리스 `/refresh-topics <mode_args>` 를 백그라운드로 실행. 주제 갱신 후 슬랙 통보는
+    refresh-topics 가 topics_tool notify 로 직접 수행. 여기서는 트리거 응답만 회신한다."""
+    def work() -> None:
+        prompt = f"/refresh-topics {mode_args}".strip()
+        try:
+            r = subprocess.run(
+                [CLAUDE_BIN, "-p", prompt, "--dangerously-skip-permissions"],
+                cwd=REPO_ROOT, capture_output=True, text=True, timeout=1800,
+            )
+            if r.returncode == 0:
+                respond("✅ 주제 갱신 완료 — `/지엔씨 주제`로 갱신된 목록을 확인하세요.")
+            else:
+                respond(f"⚠️ 주제 갱신 실패(코드 {r.returncode}) — 로그를 확인하세요.")
+        except Exception as e:  # noqa: BLE001
+            respond(f"⚠️ 주제 갱신 오류 — {e}")
+    threading.Thread(target=work, daemon=True).start()
+
+
 # 한/영 명령 키워드 (슬랙 슬래시 명령은 `/gnc` 와 `/지엔씨` 둘 다 같은 핸들러로 라우팅)
 _BRIEF_KW = {"brief", "조사", "조사해", "리서치"}
 _TOPICS_KW = {"topics", "topic", "주제"}
+_REFRESH_KW = {"주제갱신", "갱신", "리프레시", "refresh", "refresh-topics"}
 _HELP_KW = {"help", "도움", "도움말", "?"}
-_ADD_KW = {"add", "추가"}
-_RM_KW = {"rm", "remove", "del", "삭제", "제거"}
-_LIST_KW = {"list", "목록", "리스트"}
 
 
 def _gnc_help() -> str:
     return (
         "*GNC 리포트 봇 명령* (한/영 모두 가능)\n"
         f"• `/지엔씨 조사 <주제>` — 지금 바로 조사 → 검수 통과 시 *exec-team* 채널에 바로 게시 _(누구나 · 하루 {DAILY_TRIGGER_LIMIT}회)_\n"
-        f"• `/지엔씨 조사`  (주제 생략) — 등록 주제 중 *무작위* 1개 자동 선정해 조사(shallow)\n"
-        "• `/지엔씨 주제` — 정기 주제 목록 + 다음 실행 시각 _(누구나)_\n"
-        "• `/지엔씨 주제 추가 <주제> | <채널> | <depth>` — 주제 추가 _(승인자만)_\n"
-        "• `/지엔씨 주제 삭제 <번호>` — 주제 삭제 _(승인자만)_\n"
+        "• `/지엔씨 조사`  (주제 생략) — 현재 주제 + *과거 주제 이력*에서 무작위 1개 조사(shallow)\n"
+        "• `/지엔씨 주제` — 이번 주 정기 주제(요일·진행상태) + 다음 실행 시각 _(누구나)_\n"
+        "• `/지엔씨 주제갱신` — 아직 조사 안 된 주제만 새로 교체 _(승인자만 · 토요일 전체 자동갱신과 별개)_\n"
         "• `/지엔씨 도움` — 도움말"
     )
 
@@ -731,7 +703,7 @@ def _handle_gnc(ack, command, respond):
         if not topic:
             picked = topics_random()
             if not picked:
-                respond("등록된 정기 주제가 없습니다. 승인자에게 `/지엔씨 주제 추가`를 요청하세요.")
+                respond("조사할 주제가 없습니다(현재 주제·과거 이력 모두 비어 있음). 토요일 자동 갱신을 기다리거나 `/지엔씨 주제갱신`을 요청하세요.")
                 return
             topic, channel, _depth = picked
             depth = "shallow"   # 랜덤 조사는 비용 보호를 위해 shallow 강제
@@ -744,32 +716,30 @@ def _handle_gnc(ack, command, respond):
         _run_brief_async(topic, "exec-team", "medium", respond, publish=True)
         return
 
-    # 주제 / topic — 두 번째 토큰이 하위 동작(추가/삭제/목록)
+    # 주제갱신 (단일 토큰) — 아직 조사 안 된 주제만 교체(주중 보충). 승인자만(D17).
+    # ↓ 누구나 열고 싶으면 아래 is_approver 가드를 제거하면 됨(운영자 판단).
+    if head in _REFRESH_KW:
+        if not is_approver(user):
+            respond("⛔ 주제 갱신은 지정 승인자만 가능합니다. (조사는 누구나 `/지엔씨 조사`)")
+            return
+        respond("🔄 아직 조사 안 된 주제를 새로 교체 중입니다… (이미 조사된 주제는 유지) _수 분 소요_")
+        _run_refresh_async("--replace-pending", respond)
+        return
+
+    # 주제 / topic — 두 번째 토큰이 '갱신'이면 주제 갱신, 아니면 목록(요일·상태)
     if head in _TOPICS_KW:
         action = tokens[1].lower() if len(tokens) > 1 else "list"
-        payload = text.split(maxsplit=2)[2].strip() if len(tokens) > 2 else ""
-        if action in _ADD_KW or action in _RM_KW:
-            # 주제 추가/삭제는 정기 스케줄 구성 변경이므로 지정 승인자만(D17).
+        if action in _REFRESH_KW:  # `/지엔씨 주제 갱신`
             if not is_approver(user):
-                respond("⛔ 주제 추가/삭제는 지정 승인자만 가능합니다. (조사는 누구나 `/지엔씨 조사`)")
+                respond("⛔ 주제 갱신은 지정 승인자만 가능합니다. (조사는 누구나 `/지엔씨 조사`)")
                 return
-            if action in _ADD_KW:
-                if not payload:
-                    respond("사용법: `/지엔씨 주제 추가 <주제> | <채널> | <depth>` (채널·depth 생략 가능)")
-                    return
-                respond("➕ 주제 추가됨:\n`" + topics_add(payload) + "`")
-            else:
-                try:
-                    n = int(payload.split()[0]) if payload else 0
-                except ValueError:
-                    respond("사용법: `/지엔씨 주제 삭제 <번호>` — `/지엔씨 주제`로 번호 확인")
-                    return
-                removed = topics_rm(n)
-                respond(f"🗑️ 삭제됨: `{removed}`" if removed else f"{n}번 주제가 없습니다. 먼저 `/지엔씨 주제`로 번호를 확인하세요.")
-        else:  # 목록(기본): 누구나
-            sched = schedule_summary()
-            header = f"📋 현재 정기 주제 ({sched}):" if sched else "📋 현재 정기 주제:"
-            respond(header + "\n" + topics_list())
+            respond("🔄 아직 조사 안 된 주제를 새로 교체 중입니다… (이미 조사된 주제는 유지) _수 분 소요_")
+            _run_refresh_async("--replace-pending", respond)
+            return
+        # 목록(기본): 누구나
+        sched = schedule_summary()
+        header = f"📋 이번 주 정기 주제 ({sched}):" if sched else "📋 이번 주 정기 주제:"
+        respond(header + "\n" + topics_list())
         return
 
     respond(_gnc_help())

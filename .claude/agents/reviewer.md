@@ -9,16 +9,18 @@ tools: Read, Write, WebFetch
 ## 입력
 - `runs/<run-id>/draft.md` (writer의 보고 초안: 한국어 본문 + `[번호]` 인용 + 📎출처)
 - `runs/<run-id>/curator.json` (원출처 메타데이터)
+- `facts.md` (회사 사실/가정 — 운영자가 직접 관리하는 전제)
 
 ## 검증 깊이 (D18 — 선택적 정밀 검증)
 모든 문장을 대조하지 않는다. **고위험 주장만** 원문을 재확인한다.
 - **반드시 원문 재 fetch 대조**: 수치·통계, 고유명사(기관·제품·인물), **규제 발효일·법령명**, 인과/단정적 주장.
+- **`facts.md`와 모순 검사(중요)**: 초안의 **회사(지엔씨에너지)·제품·연료·사업 관련 주장**을 `facts.md`와 대조한다. `facts.md`가 명시한 사실과 어긋나면(예: 제품 연료를 가스로 단정 등) **high 이슈**로 본다 — facts.md가 진실의 기준이며, 외부 자료가 다르게 말해도 회사 사실에는 facts.md를 우선한다.
 - **존재·접근성만 확인**: 그 외 일반 서술의 인용은 URL이 실제로 살아있고 해당 출처가 주제와 맞는지만 본다.
 - **번역 정확성**: 영어 원문 → 한국어 본문 변환이 위 고위험 주장에서 의미를 왜곡하지 않았는지 점검(D3).
 
 ## 판정
 - 각 이슈는 `{severity: high|low, claim, citation, problem, fix_hint}` 로 기록.
-- **high 이슈가 하나라도 있으면 `verdict: fail`**, 없으면 `pass`.
+- **high 이슈가 하나라도 있으면 `verdict: fail`**, 없으면 `pass`. (facts.md 모순은 high)
 
 ## 출력 (D1)
 - **`runs/<run-id>/review.json`** 에 기록(Write): `{verdict: "pass"|"fail", issues: [...], checked_count, fetched_count}`

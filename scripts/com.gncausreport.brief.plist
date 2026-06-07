@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/limsungmin/Library/CloudStorage/Dropbox/96. dropbox_vsstudio/gncausreport/scripts/run_topics.sh</string>
+        <string>/Users/limsungmin/gncausreport/scripts/run_topics.sh</string>
     </array>
 
     <!-- 주 1회: 월(1) 08:00. (주 2회로 늘리려면 목(4) dict 주석 해제) -->
@@ -22,8 +22,8 @@
     <false/>
 
     <key>StandardOutPath</key>
-    <string>/Users/limsungmin/Library/CloudStorage/Dropbox/96. dropbox_vsstudio/gncausreport/logs/launchd.out.log</string>
+    <string>/Users/limsungmin/gncausreport/logs/launchd.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/limsungmin/Library/CloudStorage/Dropbox/96. dropbox_vsstudio/gncausreport/logs/launchd.err.log</string>
+    <string>/Users/limsungmin/gncausreport/logs/launchd.err.log</string>
 </dict>
 </plist>

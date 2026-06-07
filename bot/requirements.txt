@@ -1,3 +1,6 @@
 # 슬랙 봇 (2·3단계, Socket Mode, D13)
 slack-bolt>=1.18
 slack-sdk>=3.27
+
+# 이메일 발송(Resend) — 보고서 마크다운 → HTML 변환용. 발송 자체는 표준 urllib.
+markdown>=3.5

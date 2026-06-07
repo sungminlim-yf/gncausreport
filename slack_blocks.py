@@ -251,15 +251,45 @@ def fallback_text(report: str) -> str:
     return "보고서"
 
 
-def approval_action_blocks(run_id: str) -> list[dict]:
-    """초안 메시지 끝에 붙일 승인/반려 버튼 블록(D5)."""
-    return [
-        {"type": "context", "elements": [
-            {"type": "mrkdwn", "text": f"run-id: `{run_id}` · 지정 승인자만 유효(D17)"}]},
-        {"type": "actions", "block_id": "approval_actions", "elements": [
-            {"type": "button", "style": "primary", "text": {"type": "plain_text", "text": "✅ 승인"},
-             "action_id": "approve_post", "value": run_id},
-            {"type": "button", "style": "danger", "text": {"type": "plain_text", "text": "❌ 반려"},
-             "action_id": "reject_post", "value": run_id},
-        ]},
+def status_action_blocks(run_id: str, *, approved: bool = False, emailed: bool = False,
+                         target: str | None = None, approver: str | None = None) -> list[dict]:
+    """초안/처리 상태에 맞는 버튼 블록(D5).
+
+    버튼은 '아직 남은 동작'만 보여준다:
+      - 미승인: [✅ 승인] [❌ 반려]
+      - 미발송: [📧 이메일 발송]  (승인 전/후 모두 가능 — 승인과 독립)
+    승인·발송이 끝나면 해당 버튼은 사라지고 상태만 표시된다.
+    """
+    status = [f"run-id: `{run_id}`"]
+    if approved:
+        tgt = f" → <#{target}>" if target else ""
+        by = f" (by <@{approver}>)" if approver else ""
+        status.append(f"✅ 승인됨{tgt}{by}")
+    if emailed:
+        status.append("📧 이메일 발송됨")
+    if not approved and not emailed:
+        status.append("지정 승인자만 유효(D17)")
+
+    blocks: list[dict] = [
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": " · ".join(status)}]}
     ]
+    elements: list[dict] = []
+    if not approved:
+        elements.append({"type": "button", "style": "primary",
+                         "text": {"type": "plain_text", "text": "✅ 승인"},
+                         "action_id": "approve_post", "value": run_id})
+        elements.append({"type": "button", "style": "danger",
+                         "text": {"type": "plain_text", "text": "❌ 반려"},
+                         "action_id": "reject_post", "value": run_id})
+    if not emailed:
+        elements.append({"type": "button",
+                         "text": {"type": "plain_text", "text": "📧 이메일 발송"},
+                         "action_id": "email_send", "value": run_id})
+    if elements:
+        blocks.append({"type": "actions", "block_id": "approval_actions", "elements": elements})
+    return blocks
+
+
+def approval_action_blocks(run_id: str) -> list[dict]:
+    """초안 메시지 끝에 붙일 버튼 블록(D5). 초기 상태(미승인·미발송)."""
+    return status_action_blocks(run_id)

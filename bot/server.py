@@ -51,6 +51,14 @@ CLAUDE_BIN = (
 sys.path.insert(0, REPO_ROOT)
 import slack_blocks  # noqa: E402
 
+# 이메일 발송(Resend) — 승인된 보고서를 지정 메일 리스트로(별도 버튼, D2 확장)
+# python bot/server.py 실행 시엔 같은 디렉터리, 패키지 import 시엔 bot.email_sender 로 잡힘.
+try:
+    from bot import email_sender  # noqa: E402
+except ImportError:  # pragma: no cover
+    import email_sender  # type: ignore  # noqa: E402
+
+
 # 주제 계획표(topics.md) 단일 관리 헬퍼 — run_topics.sh 와 공용(파싱·요일·상태 로직 일원화)
 sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
 import topics_tool as tt  # noqa: E402
@@ -242,12 +250,15 @@ def handle_approve(ack, body, client, logger):
     idx[run_id] = entry
     save_run_index(idx)
 
-    # 초안 메시지 갱신(버튼 제거 + 결과 표시)
+    # 초안 메시지 갱신: 승인/반려 버튼은 제거하되 '📧 이메일 발송'은 남긴다(아직 미발송 시).
+    # → 승인 후에도 메일 리스트 발송을 별도로 진행할 수 있음(승인과 독립, D2 확장).
     client.chat_update(
         channel=channel,
         ts=body["message"]["ts"],
         text=f"✅ 승인됨 — <#{target}> 채널에 본 게시 완료 (by <@{user}>)",
-        blocks=[],
+        blocks=slack_blocks.status_action_blocks(
+            run_id, approved=True, emailed=bool(entry.get("emailed")),
+            target=target, approver=user),
     )
 
 
@@ -273,6 +284,64 @@ def handle_reject(ack, body, client):
         text=f"❌ 반려됨 (by <@{user}>) — 수정 후 재게시 필요",
         blocks=[],
     )
+
+
+# ── 2단계 확장: 이메일 발송 (Resend) — 승인과 독립된 별도 버튼 ──────────────
+@app.action("email_send")
+def handle_email_send(ack, body, client, logger):
+    ack()  # 3초 내 즉시 ack (D4)
+    user = body["user"]["id"]
+    run_id = body["actions"][0]["value"]
+    channel = body["channel"]["id"]
+    msg_ts = body["message"]["ts"]
+
+    if not is_approver(user):
+        client.chat_postEphemeral(channel=channel, user=user, text="⛔ 발송 권한이 없습니다(지정 승인자만 가능).")
+        return
+
+    # 설정 점검(미설정이면 친절히 안내 — 봇은 죽지 않음)
+    ok, reason = email_sender.email_configured()
+    if not ok:
+        client.chat_postEphemeral(channel=channel, user=user,
+                                  text=f"⚠️ 이메일이 아직 설정되지 않았습니다: {reason}\n(.env 의 RESEND_API_KEY · EMAIL_FROM · EMAIL_RECIPIENTS 확인)")
+        return
+
+    archive_path = find_archive_for_run(run_id)
+    if not archive_path:
+        _notify_ops(client, f"이메일 발송 요청했으나 archive 미발견: run-id={run_id}")
+        client.chat_postEphemeral(channel=channel, user=user,
+                                  text=f"⚠️ archive 를 찾지 못했습니다(run-id={run_id}). 운영자에게 알렸습니다.")
+        return
+
+    idx = load_run_index()
+    entry = idx.get(run_id, {})
+    if entry.get("emailed"):
+        client.chat_postEphemeral(channel=channel, user=user, text="ℹ️ 이미 이메일로 발송된 보고서입니다(중복 방지).")
+        return
+
+    title = _report_title(archive_path)
+    result = email_sender.send_report_email(subject=title, markdown_body=read_report(archive_path))
+    if not result.get("ok"):
+        _notify_ops(client, f"이메일 발송 실패(run-id={run_id}): {result.get('detail')}")
+        client.chat_postEphemeral(channel=channel, user=user,
+                                  text=f"⚠️ 이메일 발송 실패: {result.get('detail')}")
+        return
+
+    # 발송 성공 기록(중복 방지) + 메시지 갱신(이메일 버튼 제거, 승인 버튼은 상태대로 유지)
+    entry["emailed"] = {"by": user, "count": result.get("count"), "id": result.get("id")}
+    idx[run_id] = entry
+    save_run_index(idx)
+
+    approved = entry.get("approved") or {}
+    client.chat_update(
+        channel=channel, ts=msg_ts,
+        text=f"📧 이메일 발송 완료 — 수신자 {result.get('count')}명 (by <@{user}>)",
+        blocks=slack_blocks.status_action_blocks(
+            run_id, approved=bool(approved), emailed=True,
+            target=approved.get("channel"), approver=approved.get("by")),
+    )
+    client.chat_postEphemeral(channel=channel, user=user,
+                              text=f"📧 이메일 발송 완료 — 수신자 {result.get('count')}명에게 보냈습니다.")
 
 
 # ── 3단계: Q&A (D4·D9) — QA_ENABLED=1 일 때만 활성 ──────────────────────

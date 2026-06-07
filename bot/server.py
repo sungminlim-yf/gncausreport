@@ -639,7 +639,7 @@ def topics_rm(n: int) -> str | None:
 # ── 일일 조사 트리거 한도(구독 토큰 보호) ────────────────────────────────
 # `/지엔씨 조사`는 멤버 누구나 쓸 수 있고 승인 없이 바로 게시되므로(D2 예외),
 # 무분별 남발로 구독 토큰 한도가 소진되지 않도록 하루 총 N회로 제한한다.
-DAILY_TRIGGER_LIMIT = 10
+DAILY_TRIGGER_LIMIT = 30
 _QUOTA_FILE = os.path.join(os.path.expanduser("~"), ".gncausreport-quota.json")
 _QUOTA_LOCK = threading.Lock()
 

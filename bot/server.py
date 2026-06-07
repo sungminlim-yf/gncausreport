@@ -636,17 +636,55 @@ def topics_rm(n: int) -> str | None:
     return content.strip()
 
 
-def _run_brief_async(topic: str, channel: str, depth: str, respond) -> None:
-    """헤드리스 /brief 를 백그라운드 스레드에서 실행(스케줄러와 동일 경로). 완료 시 회신."""
+# ── 일일 조사 트리거 한도(구독 토큰 보호) ────────────────────────────────
+# `/지엔씨 조사`는 멤버 누구나 쓸 수 있고 승인 없이 바로 게시되므로(D2 예외),
+# 무분별 남발로 구독 토큰 한도가 소진되지 않도록 하루 총 N회로 제한한다.
+DAILY_TRIGGER_LIMIT = 10
+_QUOTA_FILE = os.path.join(os.path.expanduser("~"), ".gncausreport-quota.json")
+_QUOTA_LOCK = threading.Lock()
+
+
+def _quota_check_and_inc() -> tuple[bool, int]:
+    """오늘(서울 날짜) `/지엔씨 조사` 트리거 수를 +1. (허용여부, 오늘 사용횟수) 반환.
+    한도 초과 시 (False, 현재횟수)로 미증가. 봇 재시작에도 유지되도록 파일에 보존(레포 밖 HOME)."""
+    today = datetime.now(_SEOUL).strftime("%Y-%m-%d")
+    with _QUOTA_LOCK:
+        try:
+            with open(_QUOTA_FILE, "r", encoding="utf-8") as f:
+                d = json.load(f)
+        except Exception:  # noqa: BLE001
+            d = {}
+        if d.get("date") != today:           # 날짜 바뀌면 리셋(서울 자정 기준)
+            d = {"date": today, "count": 0}
+        if d["count"] >= DAILY_TRIGGER_LIMIT:
+            return False, d["count"]
+        d["count"] += 1
+        try:
+            with open(_QUOTA_FILE, "w", encoding="utf-8") as f:
+                json.dump(d, f)
+        except Exception:  # noqa: BLE001
+            pass
+        return True, d["count"]
+
+
+def _run_brief_async(topic: str, channel: str, depth: str, respond, publish: bool = False) -> None:
+    """헤드리스 /brief 를 백그라운드 스레드에서 실행(스케줄러와 동일 경로). 완료 시 회신.
+    publish=True 면 --publish 로 *검수 통과 시* 승인 없이 대상 채널 직접 게시(D2 예외)."""
     def work() -> None:
         prompt = f"/brief {topic} {channel} --depth {depth}"
+        if publish:
+            prompt += " --publish"
         try:
             r = subprocess.run(
                 [CLAUDE_BIN, "-p", prompt, "--dangerously-skip-permissions"],
                 cwd=REPO_ROOT, capture_output=True, text=True, timeout=1800,
             )
             if r.returncode == 0:
-                respond(f"✅ 조사 완료 — 스테이징 채널의 *초안+승인버튼*을 확인하세요: *{topic}*")
+                if publish:
+                    respond(f"✅ 조사 완료: *{topic}* — 검수 통과 시 *{channel}* 채널에 게시됨"
+                            "(검수 미통과 시 스테이징에 보류).")
+                else:
+                    respond(f"✅ 조사 완료 — 스테이징 채널의 *초안+승인버튼*을 확인하세요: *{topic}*")
             else:
                 respond(f"⚠️ 조사 실패(코드 {r.returncode}): *{topic}* — 로그를 확인하세요.")
         except Exception as e:  # noqa: BLE001
@@ -665,62 +703,70 @@ _LIST_KW = {"list", "목록", "리스트"}
 
 def _gnc_help() -> str:
     return (
-        "*GNC 리포트 봇 명령* (지정 승인자만 · 한/영 모두 가능)\n"
-        "• `/지엔씨 조사 <주제>`  (= `/gnc brief <주제>`) — 지금 바로 조사 → 스테이징 초안+승인버튼\n"
-        "• `/지엔씨 조사`  (주제 생략) — 등록 주제 중 *무작위* 1개 자동 선정해 조사\n"
-        "• `/지엔씨 주제`  (= `/gnc topics`) — 정기 주제 목록\n"
-        "• `/지엔씨 주제 추가 <주제> | <채널> | <depth>`  (= `topic add`) — 주제 추가(채널·depth 생략 시 exec-team/medium)\n"
-        "• `/지엔씨 주제 삭제 <번호>`  (= `topic rm`) — 주제 삭제\n"
-        "• `/지엔씨 도움`  (= `/gnc help`) — 도움말"
+        "*GNC 리포트 봇 명령* (한/영 모두 가능)\n"
+        f"• `/지엔씨 조사 <주제>` — 지금 바로 조사 → 검수 통과 시 *exec-team* 채널에 바로 게시 _(누구나 · 하루 {DAILY_TRIGGER_LIMIT}회)_\n"
+        f"• `/지엔씨 조사`  (주제 생략) — 등록 주제 중 *무작위* 1개 자동 선정해 조사(shallow)\n"
+        "• `/지엔씨 주제` — 정기 주제 목록 + 다음 실행 시각 _(누구나)_\n"
+        "• `/지엔씨 주제 추가 <주제> | <채널> | <depth>` — 주제 추가 _(승인자만)_\n"
+        "• `/지엔씨 주제 삭제 <번호>` — 주제 삭제 _(승인자만)_\n"
+        "• `/지엔씨 도움` — 도움말"
     )
 
 
 def _handle_gnc(ack, command, respond):
     ack()  # 3초 내 즉시 ack (D4)
     user = command.get("user_id", "")
-    if not is_approver(user):
-        respond("⛔ 권한이 없습니다(지정 승인자만 사용 가능).")
-        return
-
     text = (command.get("text") or "").strip()
     tokens = text.split()
     head = tokens[0].lower() if tokens else "help"
 
-    # 조사 / brief — 첫 토큰 뒤 전체가 주제. 주제 생략 시 등록된 주제 중 무작위 선정.
+    # 조사 / brief — 멤버 누구나 가능(개방). 하루 총 한도 적용 + 검수 통과 시 승인 없이 바로 게시(D2 예외).
     if head in _BRIEF_KW:
+        ok, used = _quota_check_and_inc()
+        if not ok:
+            respond(f"⛔ 오늘 `/지엔씨 조사` 일일 한도({DAILY_TRIGGER_LIMIT}회)에 도달했습니다."
+                    " 서울 자정 이후 다시 시도하세요. _(구독 토큰 보호)_")
+            return
         topic = text[len(tokens[0]):].strip()
         if not topic:
             picked = topics_random()
             if not picked:
-                respond("등록된 정기 주제가 없습니다. 먼저 `/지엔씨 주제 추가 <주제>`로 추가하세요.")
+                respond("등록된 정기 주제가 없습니다. 승인자에게 `/지엔씨 주제 추가`를 요청하세요.")
                 return
-            topic, channel, depth = picked
-            respond(f"🎲 등록 주제 중 무작위 선정: *{topic}* _(채널 {channel} · depth {depth})_\n"
-                    "조사를 시작합니다 — 수 분 뒤 스테이징 채널에 초안+승인버튼.")
-            _run_brief_async(topic, channel, depth, respond)
+            topic, channel, _depth = picked
+            depth = "shallow"   # 랜덤 조사는 비용 보호를 위해 shallow 강제
+            respond(f"🎲 무작위 주제: *{topic}* _(채널 {channel} · depth {depth})_ · 오늘 {used}/{DAILY_TRIGGER_LIMIT}회\n"
+                    f"검수 통과 시 *{channel}* 채널에 바로 게시됩니다(수 분 소요).")
+            _run_brief_async(topic, channel, depth, respond, publish=True)
             return
-        respond(f"🔎 조사를 시작합니다: *{topic}*\n수 분 뒤 스테이징 채널에 초안+승인버튼이 올라옵니다.")
-        _run_brief_async(topic, "exec-team", "medium", respond)
+        respond(f"🔎 조사 시작: *{topic}* · 오늘 {used}/{DAILY_TRIGGER_LIMIT}회\n"
+                "검수 통과 시 *exec-team* 채널에 바로 게시됩니다(수 분 소요).")
+        _run_brief_async(topic, "exec-team", "medium", respond, publish=True)
         return
 
     # 주제 / topic — 두 번째 토큰이 하위 동작(추가/삭제/목록)
     if head in _TOPICS_KW:
         action = tokens[1].lower() if len(tokens) > 1 else "list"
         payload = text.split(maxsplit=2)[2].strip() if len(tokens) > 2 else ""
-        if action in _ADD_KW:
-            if not payload:
-                respond("사용법: `/지엔씨 주제 추가 <주제> | <채널> | <depth>` (채널·depth 생략 가능)")
+        if action in _ADD_KW or action in _RM_KW:
+            # 주제 추가/삭제는 정기 스케줄 구성 변경이므로 지정 승인자만(D17).
+            if not is_approver(user):
+                respond("⛔ 주제 추가/삭제는 지정 승인자만 가능합니다. (조사는 누구나 `/지엔씨 조사`)")
                 return
-            respond("➕ 주제 추가됨:\n`" + topics_add(payload) + "`")
-        elif action in _RM_KW:
-            try:
-                n = int(payload.split()[0]) if payload else 0
-            except ValueError:
-                respond("사용법: `/지엔씨 주제 삭제 <번호>` — `/지엔씨 주제`로 번호 확인")
-                return
-            removed = topics_rm(n)
-            respond(f"🗑️ 삭제됨: `{removed}`" if removed else f"{n}번 주제가 없습니다. 먼저 `/지엔씨 주제`로 번호를 확인하세요.")
-        else:  # 목록(기본): list/목록/없음/미인식
+            if action in _ADD_KW:
+                if not payload:
+                    respond("사용법: `/지엔씨 주제 추가 <주제> | <채널> | <depth>` (채널·depth 생략 가능)")
+                    return
+                respond("➕ 주제 추가됨:\n`" + topics_add(payload) + "`")
+            else:
+                try:
+                    n = int(payload.split()[0]) if payload else 0
+                except ValueError:
+                    respond("사용법: `/지엔씨 주제 삭제 <번호>` — `/지엔씨 주제`로 번호 확인")
+                    return
+                removed = topics_rm(n)
+                respond(f"🗑️ 삭제됨: `{removed}`" if removed else f"{n}번 주제가 없습니다. 먼저 `/지엔씨 주제`로 번호를 확인하세요.")
+        else:  # 목록(기본): 누구나
             sched = schedule_summary()
             header = f"📋 현재 정기 주제 ({sched}):" if sched else "📋 현재 정기 주제:"
             respond(header + "\n" + topics_list())

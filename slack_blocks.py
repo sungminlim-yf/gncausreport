@@ -148,6 +148,15 @@ def _divider() -> dict:
     return {"type": "divider"}
 
 
+def _is_sources_header(line: str) -> bool:
+    """출처 섹션 헤더인지 판별 — writer(LLM)가 `## 📎 출처` 대신
+    `📎 **출처**`·`**출처**`·`📎 출처` 등으로 써도 출처로 인식해 본문 닷 처리를 막는다.
+    마크다운 강조·헤더기호·이모지·공백을 벗겨낸 뒤 정확히 출처 라벨일 때만 True."""
+    s = (line.replace("*", "").replace("#", "")
+             .replace("📎", "").replace(":paperclip:", "").strip())
+    return s in ("출처", "출처 목록", "참고", "참고문헌", "Sources", "References")
+
+
 def render_blocks(report: str) -> list[dict]:
     """보고서 마크다운 전체를 Block Kit 블록 리스트로 변환."""
     blocks: list[dict] = []
@@ -189,6 +198,10 @@ def render_blocks(report: str) -> list[dict]:
             flush_body()
             blocks.append(_section("*" + to_mrkdwn(st[4:]) + "*"))
             mode = "body"
+        elif mode != "sources" and _is_sources_header(st):
+            # `##` 없이 `📎 **출처**`·`**출처**` 등으로 쓴 출처 헤더도 출처 섹션으로 전환
+            flush_body()
+            mode = "sources"
         elif st == "---":
             if mode == "sources":
                 mode = "footer"   # 출처 끝, 이후는 꼬리 면책

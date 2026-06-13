@@ -115,11 +115,17 @@ def markdown_to_html(md: str, *, unsubscribe: bool = False, extra_html: str = ""
     except Exception:
         body = "<pre style='white-space:pre-wrap;font-family:inherit'>" + html.escape(md) + "</pre>"
     # 수신거부 줄은 f-string 밖에서 합친다(삼중 중괄호 자리표시자 보존).
+    # 과하지 않게, 옅은 회색 텍스트링크보다 한 단계 또렷한 '아웃라인 pill' 버튼으로 노출.
     unsub = ""
     if unsubscribe:
-        unsub = ("<br><a href=\"{{{RESEND_UNSUBSCRIBE_URL}}}\" "
-                 "style='color:#999;text-decoration:underline'>수신거부</a> · "
-                 "수신 추가 요청은 본 메일에 회신")
+        unsub = (
+            "<div style='margin-top:12px'>"
+            "<a href=\"{{{RESEND_UNSUBSCRIBE_URL}}}\" "
+            "style='display:inline-block;padding:4px 13px;border:1px solid #b9c6dd;"
+            "border-radius:6px;background:#f2f6fc;color:#3f5e8c;text-decoration:none;"
+            "font-size:13px;font-weight:600'>수신거부</a>"
+            "<div style='margin-top:7px;font-size:12px;color:#999'>수신 추가 요청은 본 메일에 회신</div>"
+            "</div>")
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'></head>"

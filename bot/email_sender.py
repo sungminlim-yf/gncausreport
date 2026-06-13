@@ -123,7 +123,9 @@ def markdown_to_html(md: str, *, unsubscribe: bool = False, extra_html: str = ""
             "<a href=\"{{{RESEND_UNSUBSCRIBE_URL}}}\" "
             "style='display:inline-block;padding:4px 13px;border:1px solid #b9c6dd;"
             "border-radius:6px;background:#f2f6fc;color:#3f5e8c;text-decoration:none;"
-            "font-size:13px;font-weight:600'>수신거부</a>"
+            "font-size:13px;font-weight:600;vertical-align:middle'>수신거부</a>"
+            "<span style='margin-left:9px;font-size:12px;color:#999;vertical-align:middle'>"
+            "뉴스레터 수신 중단을 원하실 경우 클릭해 주세요</span>"
             "<div style='margin-top:7px;font-size:12px;color:#999'>수신 추가 요청은 본 메일에 회신</div>"
             "</div>")
     return (

@@ -327,9 +327,10 @@ def handle_email_send(ack, body, client, logger):
         return
 
     title = _report_title(archive_path)
-    # 뉴스레터 맨 아래: 이번 주 진행현황 로드맵(요일 단위)을 본문 끝에 첨부.
-    body_md = read_report(archive_path) + "\n\n" + tt.render_roster_md()
-    result = email_sender.send_report_email(subject=title, markdown_body=body_md)
+    # 뉴스레터 맨 아래: 이번 주 진행현황 로드맵(요일 단위)을 HTML 카드로 본문 뒤에 첨부.
+    result = email_sender.send_report_email(
+        subject=title, markdown_body=read_report(archive_path),
+        extra_html=tt.render_roster_html())
     if not result.get("ok"):
         _notify_ops(client, f"이메일 발송 실패(run-id={run_id}): {result.get('detail')}")
         client.chat_postEphemeral(channel=channel, user=user,

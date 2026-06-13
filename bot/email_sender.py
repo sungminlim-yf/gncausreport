@@ -101,10 +101,11 @@ def _request(method: str, path: str, payload: dict | None = None) -> tuple[int, 
 
 
 # ── 마크다운 → HTML ─────────────────────────────────────────────────────
-def markdown_to_html(md: str, *, unsubscribe: bool = False) -> str:
+def markdown_to_html(md: str, *, unsubscribe: bool = False, extra_html: str = "") -> str:
     """보고서 마크다운 → 이메일용 HTML(간단 스타일 래핑).
 
     markdown 패키지가 있으면 정식 변환, 없으면 깨지지 않게 <pre> 폴백.
+    extra_html: 본문과 푸터 사이에 그대로 삽입할 HTML(예: 진행현황 로드맵 카드 — 마크다운 변환 없이).
     unsubscribe=True 면 푸터에 Resend 수신거부 링크 자리표시자({{{RESEND_UNSUBSCRIBE_URL}}})를 넣는다
     (Broadcasts 경로에서 Resend 가 실제 URL 로 치환·호스팅).
     """
@@ -127,6 +128,7 @@ def markdown_to_html(md: str, *, unsubscribe: bool = False) -> str:
         "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',sans-serif;"
         "font-size:15px;line-height:1.7;color:#222;background:#ffffff\">"
         + body
+        + extra_html
         + "<hr style='border:none;border-top:1px solid #eee;margin:28px 0 14px'>"
         + "<div style='font-size:12px;color:#999'>GnC AUS 시장 리포트 · 승인 후 자동 발송"
         + unsub
@@ -136,23 +138,26 @@ def markdown_to_html(md: str, *, unsubscribe: bool = False) -> str:
 
 
 # ── 발송 ────────────────────────────────────────────────────────────────
-def send_report_email(subject: str, markdown_body: str) -> dict:
+def send_report_email(subject: str, markdown_body: str, extra_html: str = "") -> dict:
     """보고서를 메일 리스트로 발송. 반환: {ok, count, id?, detail?}.
 
     RESEND_AUDIENCE_ID 가 있으면 Broadcasts(오디언스 + 자동 수신거부), 없으면 BCC.
-    예외를 던지지 않고 항상 dict 로 결과를 돌려준다(봇이 안 죽게).
+    extra_html: 본문 뒤에 붙일 HTML(진행현황 로드맵 카드 등). 예외를 던지지 않고 dict 반환.
     """
     ok, reason = email_configured()
     if not ok:
         return {"ok": False, "detail": reason, "count": 0}
 
-    prefix = os.environ.get("EMAIL_SUBJECT_PREFIX", "")
-    full_subject = f"{prefix}{subject}".strip() or "(제목 없음)"
+    # 접두어와 제목 사이 한 칸 공백 보장(예: "[GnC 시장리포트] 제목"). 접두어 없으면 제목만.
+    prefix = os.environ.get("EMAIL_SUBJECT_PREFIX", "").strip()
+    full_subject = (f"{prefix} {subject}" if prefix else subject).strip() or "(제목 없음)"
     sender = os.environ["EMAIL_FROM"]
 
     if _audience_id():
-        return _send_broadcast(sender, full_subject, markdown_to_html(markdown_body, unsubscribe=True))
-    return _send_bcc(sender, full_subject, markdown_to_html(markdown_body))
+        return _send_broadcast(
+            sender, full_subject,
+            markdown_to_html(markdown_body, unsubscribe=True, extra_html=extra_html))
+    return _send_bcc(sender, full_subject, markdown_to_html(markdown_body, extra_html=extra_html))
 
 
 def _send_bcc(sender: str, full_subject: str, html_body: str) -> dict:

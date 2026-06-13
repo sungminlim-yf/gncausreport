@@ -35,6 +35,7 @@ apply-* 의 <json> 은 파일 경로. 형식:
 """
 from __future__ import annotations
 
+import html
 import json
 import os
 import random
@@ -267,6 +268,39 @@ def render_roster_mrkdwn() -> str:
             mark = "✅ " if d["state"] == "done" else "• "
             out.append(f"   {mark}{e['topic']}")
     return "\n".join(out)
+
+
+_STATE_COLOR = {"done": "#2e7d46", "today": "#1f6feb", "upcoming": "#8a8f98"}
+
+
+def render_roster_html() -> str:
+    """이메일용 진행현황 로드맵 — 마크다운 변환 의존 없이 깔끔한 HTML 카드.
+
+    (마크다운 경로는 nl2br+리스트 충돌로 '- ' 가 글자로 새므로, 이메일은 HTML 로 직접 렌더)
+    """
+    p = weekly_progress()
+    if not p["total"]:
+        return ""
+    parts = [
+        "<div style=\"margin:20px 0 0;padding:16px 18px;background:#f6f8fb;"
+        "border:1px solid #e6ebf1;border-radius:10px\">",
+        "<div style=\"font-size:15px;font-weight:700;color:#222;margin-bottom:12px\">"
+        f"📋 이번주 진행현황 <span style=\"color:#2e7d46\">{p['done']}/{p['total']} 완료</span>"
+        f" <span style=\"color:#8a8f98;font-weight:400;font-size:13px\">· 주차 {html.escape(p['week'])}</span></div>",
+    ]
+    for d in p["days"]:
+        color = _STATE_COLOR[d["state"]]
+        parts.append(
+            "<div style=\"margin-bottom:10px\">"
+            f"<div style=\"font-weight:600;color:{color};font-size:14px;margin-bottom:3px\">"
+            f"{_STATE_HEAD[d['state']]} {d['ko']}요일{_STATE_NOTE[d['state']]}</div>"
+            "<ul style=\"margin:0;padding-left:20px;color:#444;font-size:14px;line-height:1.6\">"
+        )
+        for e in d["topics"]:
+            parts.append(f"<li>{html.escape(e['topic'])}</li>")
+        parts.append("</ul></div>")
+    parts.append("</div>")
+    return "".join(parts)
 
 
 def render_topics_email_md() -> tuple[str, str]:

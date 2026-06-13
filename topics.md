@@ -5,19 +5,19 @@
 > 토요일 08:00(시드니) `/refresh-topics --weekly --auto` 가 다음 주 9개를 자동 선정·배분(Mon·Wed·Fri 3건씩).
 > 정기 실행(run_topics.sh)은 그날 요일의 `pending` 만 조사하고 `done` 으로 표시함.
 > 빠진 주제는 archive/topics-history.md 에 누적(랜덤 조사 풀·반복 회피).
-> 주차: 2026-W23 · 최근 갱신: 2026-06-07 (5컬럼 스키마 수동 이행)
+> 주차: 2026-W25 · 최근 갱신: 2026-06-13
 
 # === 월요일 (Mon) ===
-호주 데이터센터 신규 캠퍼스·용량(MW) 동향 (특히 퀸즐랜드·브리즈번) | exec-team | medium | Mon | pending
-데이터센터 계통연계·전력 규제(AEMC·AEMO) 변화와 일정 | exec-team | shallow | Mon | pending
-Eneraque 등 호주 DC EPC·전원 파트너·고객(NEXTDC·AirTrunk 등) 동향 | exec-team | shallow | Mon | pending
+호주 AS/NZS 발전기·전기설비 인증(RCM 포함) 취득 절차·소요기간·비용 — DC 비상발전 진입 요건 | exec-team | medium | Mon | pending
+호주 DC 설계 컨설턴트(Arup·Aurecon·WSP) 대상 발전기 Spec-in(설계 사양 반영) 전략 | exec-team | medium | Mon | pending
+Royston 등 호주 현지 발전기 A/S·정비·서비스망 경쟁사 역량 | exec-team | shallow | Mon | pending
 
 # === 수요일 (Wed) ===
-호주 발전설비 환경인허가(QLD EPA/ERA)·배출·소음 + 대용량 연료(디젤·LNG) 벌크저장 소방·인허가 | exec-team | shallow | Wed | pending
-호주 발전기·전기설비 인증·표준(AS/NZS·RCM·전기안전) — DC 비상발전 적용 요건 | exec-team | medium | Wed | pending
-데이터센터 비상전원용 가스터빈 경쟁사·레퍼런스 벤치마크(Kawasaki·Solar Turbines·Capstone·mtu 가스 등) | exec-team | medium | Wed | pending
+호주 비상발전 패키저 경쟁 구도 — Paratech·Nexxtgen 등 현지 경쟁사 분석 | exec-team | medium | Wed | pending
+하이퍼스케일(AWS·AirTrunk·STACK) 비상발전 발주·조달 프로세스·의사결정 구조 | exec-team | medium | Wed | pending
+ESG·탄소규제가 호주 DC 비상발전 연료 전환(HVO·가스)에 미치는 영향 | exec-team | shallow | Wed | pending
 
 # === 금요일 (Fri) ===
-호주 DC 입지의 천연가스·LNG 공급 인프라·가스가격 환경 | exec-team | medium | Fri | pending
-대형 발전모듈 호주 운송·양중(craneage)·반입 물류·도로 규제 | exec-team | shallow | Fri | pending
-Uptime Institute Tier 인증의 비상전원·연료자율시간(N+1·연료저장) 요건 | exec-team | shallow | Fri | pending
+GNC Australia 현지법인(ASIC) 설립 절차·요건·세무·규제 | exec-team | medium | Fri | pending
+인도네시아 데이터센터 비상전원 시장 기회·규제·경쟁 환경 | exec-team | medium | Fri | pending
+호주 DC 개발승인(DA) 절차에서 비상발전 심의·소음·배출 요건 | exec-team | shallow | Fri | pending

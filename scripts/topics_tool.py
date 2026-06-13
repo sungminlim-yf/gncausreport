@@ -115,6 +115,23 @@ def _current_iso_week() -> str:
     return f"{y}-W{w:02d}"
 
 
+def _week_ko(week: str | None) -> str:
+    """표시용 한글 주차 표기: '2026-W23' → '2026-23주차'.
+
+    내부 저장(topics.md 헤더·apply-* JSON)은 ISO 'YYYY-Www' 그대로 두고, 사람이 보는
+    슬랙·메일에서만 이 함수로 변환한다(한국 수신자는 'W' 표기에 익숙하지 않음).
+    형식이 다르면 원본을 그대로 돌려준다.
+    """
+    if not week:
+        return ""
+    s = week.strip()
+    if "-W" in s:
+        y, _, w = s.partition("-W")
+        if y.isdigit() and w.isdigit():
+            return f"{y}-{int(w)}주차"
+    return s
+
+
 def _render_file(entries: list[dict], week: str | None = None) -> str:
     """주제 dict 목록을 요일별 섹션으로 묶어 topics.md 전체 텍스트로 렌더."""
     if week is None:
@@ -246,7 +263,7 @@ def render_roster_md() -> str:
     if not p["total"]:
         return ""
     out = ["---", "",
-           f"**📋 이번주 진행현황 ({p['done']}/{p['total']} 완료)** · 주차 {p['week']}", ""]
+           f"**📋 이번주 진행현황 ({p['done']}/{p['total']} 완료)** · {_week_ko(p['week'])}", ""]
     for d in p["days"]:
         out.append(f"**{_STATE_HEAD[d['state']]} {d['ko']}요일{_STATE_NOTE[d['state']]}**")
         for e in d["topics"]:
@@ -261,7 +278,7 @@ def render_roster_mrkdwn() -> str:
     p = weekly_progress()
     if not p["total"]:
         return ""
-    out = [f"*📋 이번주 진행현황 ({p['done']}/{p['total']} 완료)*  ·  주차 {p['week']}"]
+    out = [f"*📋 이번주 진행현황 ({p['done']}/{p['total']} 완료)*  ·  {_week_ko(p['week'])}"]
     for d in p["days"]:
         out.append(f"{_STATE_HEAD[d['state']]} *{d['ko']}요일*{_STATE_NOTE[d['state']]}")
         for e in d["topics"]:
@@ -286,7 +303,7 @@ def render_roster_html() -> str:
         "border:1px solid #e6ebf1;border-radius:10px\">",
         "<div style=\"font-size:15px;font-weight:700;color:#222;margin-bottom:12px\">"
         f"📋 이번주 진행현황 <span style=\"color:#2e7d46\">{p['done']}/{p['total']} 완료</span>"
-        f" <span style=\"color:#8a8f98;font-weight:400;font-size:13px\">· 주차 {html.escape(p['week'])}</span></div>",
+        f" <span style=\"color:#8a8f98;font-weight:400;font-size:13px\">· {html.escape(_week_ko(p['week']))}</span></div>",
     ]
     for d in p["days"]:
         color = _STATE_COLOR[d["state"]]
@@ -307,7 +324,7 @@ def render_topics_email_md() -> tuple[str, str]:
     """주간 주제 안내 이메일의 (제목, 마크다운 본문). 현재 topics.md(=다음 주 계획) 기준."""
     _, topics = read_topics()
     week = _existing_week() or _current_iso_week()
-    subject = f"다음 주 정기 리포트 주제 안내 ({week})"
+    subject = f"다음 주 정기 리포트 주제 안내 ({_week_ko(week)})"
     out = [f"# {subject}", "",
            "다음 주 GnC 시장 리포트는 아래 주제로 **월·수·금**에 발행 예정입니다.", ""]
     for day in DAYS:
@@ -481,7 +498,7 @@ def cmd_notify_weekly() -> str:
     """
     _, topics = read_topics()
     week = _existing_week() or _current_iso_week()
-    lines = [f"📅 다음 주({week}) 정기 리포트 주제 {len(topics)}건이 확정되었습니다.", ""]
+    lines = [f"📅 다음 주({_week_ko(week)}) 정기 리포트 주제 {len(topics)}건이 확정되었습니다.", ""]
     for day in DAYS:
         rows = [e for _, e in topics if e["day"] == day]
         if not rows:

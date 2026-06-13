@@ -26,6 +26,7 @@ argument-hint: <주제> <대상채널> [--depth shallow|medium|deep] [--budget <
 ## 3. writer (메인 + content-production + audience-fit)
 - 메인 세션이 `content-production`·`audience-fit` 스킬로 `curator.json` 통과 건과 `audience/briefs/<대상채널>.md`를 읽어 **한국어 보고서**를 작성.
 - **`facts.md`(회사 사실/가정)를 읽어 진실로 간주**한다. 외부 자료가 `facts.md`와 충돌하면 **facts를 우선**하고 본문에 "(확인 필요)"로 표기(D3 — 회사 사실 오해 방지).
+- **네트워크 컨텍스트(명함 인사이트, 선택)**: 주제가 인물·파트너·고객·영업 네트워크와 관련 있으면 `contacts/_recent-digest.md`(최근 명함 인사이트 종합)를 내부 컨텍스트로 읽어 관련 인물/회사의 시사점을 반영하고, 해당 내용은 본문에 `(명함/네트워크 기반)`으로 표기. 주제가 **"신규 컨택 인사이트"** 류이면 `contacts/` 의 최근 메모를 **주 입력**으로 삼아 인물별 시사점·기회를 종합한다(이 경우 웹 검색은 보조).
 - 결과 `runs/<run-id>/draft.md` (제목→3줄요약→본문→📎출처, 핵심 수치 원문 병기 D3, `[번호]` 인용).
 
 ## 4. reviewer (서브에이전트) — 품질 게이트 + 루프(D7)

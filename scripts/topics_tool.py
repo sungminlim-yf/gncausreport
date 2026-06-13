@@ -25,6 +25,8 @@ CLI:
   topics_tool.py apply-weekly <json>    9개 새 주제로 전체 교체(3·3·3 배분, 전부 pending), 기존 history 이관
   topics_tool.py apply-replace-pending <json>  done 보존, pending 슬롯만 교체, 빠진 pending history 이관
   topics_tool.py notify "<메시지>"      운영 채널에 단순 슬랙 통보(.env 토큰 사용)
+  topics_tool.py notify-weekly          다음 주 주제 요약 + [📧 수신자에게 발송] 버튼을 통보 채널에 게시
+  topics_tool.py roster                 이번 주 진행현황 로드맵(마크다운) 출력(디버그·미리보기)
 
 apply-* 의 <json> 은 파일 경로. 형식:
   {"week": "2026-W25", "topics": [{"topic": "...", "channel": "exec-team", "depth": "medium"}, ...]}
@@ -49,6 +51,8 @@ DAYS = ["Mon", "Wed", "Fri"]            # 정기 실행 요일(슬롯 순서)
 PER_DAY = 3                             # 요일당 주제 수 → 주 9건
 SYDNEY = ZoneInfo("Australia/Sydney")   # 정기 타이머가 시드니 기준이므로 요일도 시드니로 판정
 DAY_KO = {"Mon": "월", "Wed": "수", "Fri": "금"}
+# 파이썬 weekday()(월=0…일=6) 기준 요일 인덱스 — 로드맵 '요일 단위 진행' 판정용.
+WEEKDAY_IDX = {"Mon": 0, "Wed": 2, "Fri": 4}
 DEFAULT_CHANNEL = "exec-team"
 DEFAULT_DEPTH = "medium"
 
@@ -199,6 +203,90 @@ def cmd_list() -> str:
     return "\n".join(out)
 
 
+# ── 로드맵(진행현황) — 요일 단위 진행(Model C) ────────────────────────────
+def weekly_progress() -> dict:
+    """이번 주 진행현황을 '요일 단위'로 분류해 반환(뉴스레터 하단 로드맵용).
+
+    같은 날 발송되는 보고서들이 '제각각 진행률'로 보이지 않도록, 개별 보고서의
+    게시·발송 시점이 아니라 **달력상 요일 위치**로 완료/진행중/예정을 판정한다.
+      - 지난 요일(오늘보다 앞): done   (그 요일 분량은 모두 발행 끝난 것으로 간주)
+      - 오늘 요일: today (발송 진행중)
+      - 다음 요일: upcoming (예정)
+    → 그날치 3건은 모두 동일한 로드맵을 보여줌(시점 드리프트 없음).
+    반환: {week, done, total, days:[{day, ko, state, topics:[{topic,depth},...]}]}
+    """
+    _, topics = read_topics()
+    today_idx = datetime.now(SYDNEY).weekday()  # 월=0 … 일=6
+    week = _existing_week() or _current_iso_week()
+    days: list[dict] = []
+    done = total = 0
+    for day in DAYS:
+        rows = [e for _, e in topics if e["day"] == day]
+        total += len(rows)
+        di = WEEKDAY_IDX[day]
+        if di < today_idx:
+            state = "done"
+            done += len(rows)
+        elif di == today_idx:
+            state = "today"
+        else:
+            state = "upcoming"
+        days.append({"day": day, "ko": DAY_KO[day], "state": state, "topics": rows})
+    return {"week": week, "done": done, "total": total, "days": days}
+
+
+_STATE_HEAD = {"done": "✅", "today": "🔄", "upcoming": "⏳"}
+_STATE_NOTE = {"done": "", "today": " (오늘 · 발송 진행중)", "upcoming": " (예정)"}
+
+
+def render_roster_md() -> str:
+    """이메일 본문 하단에 붙일 진행현황 로드맵(마크다운)."""
+    p = weekly_progress()
+    if not p["total"]:
+        return ""
+    out = ["---", "",
+           f"**📋 이번주 진행현황 ({p['done']}/{p['total']} 완료)** · 주차 {p['week']}", ""]
+    for d in p["days"]:
+        out.append(f"**{_STATE_HEAD[d['state']]} {d['ko']}요일{_STATE_NOTE[d['state']]}**")
+        for e in d["topics"]:
+            mark = "✅ " if d["state"] == "done" else ""
+            out.append(f"- {mark}{e['topic']}")
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def render_roster_mrkdwn() -> str:
+    """슬랙 본 게시 하단 컨텍스트 블록에 붙일 진행현황 로드맵(슬랙 mrkdwn)."""
+    p = weekly_progress()
+    if not p["total"]:
+        return ""
+    out = [f"*📋 이번주 진행현황 ({p['done']}/{p['total']} 완료)*  ·  주차 {p['week']}"]
+    for d in p["days"]:
+        out.append(f"{_STATE_HEAD[d['state']]} *{d['ko']}요일*{_STATE_NOTE[d['state']]}")
+        for e in d["topics"]:
+            mark = "✅ " if d["state"] == "done" else "• "
+            out.append(f"   {mark}{e['topic']}")
+    return "\n".join(out)
+
+
+def render_topics_email_md() -> tuple[str, str]:
+    """주간 주제 안내 이메일의 (제목, 마크다운 본문). 현재 topics.md(=다음 주 계획) 기준."""
+    _, topics = read_topics()
+    week = _existing_week() or _current_iso_week()
+    subject = f"다음 주 정기 리포트 주제 안내 ({week})"
+    out = [f"# {subject}", "",
+           "다음 주 GnC 시장 리포트는 아래 주제로 **월·수·금**에 발행 예정입니다.", ""]
+    for day in DAYS:
+        rows = [e for _, e in topics if e["day"] == day]
+        if not rows:
+            continue
+        out.append(f"## 📅 {DAY_KO[day]}요일")
+        for e in rows:
+            out.append(f"- {e['topic']}")
+        out.append("")
+    return subject, "\n".join(out).rstrip() + "\n"
+
+
 def cmd_mark_done(topic: str) -> bool:
     """주어진 주제와 일치하는 첫 pending 줄을 done 으로. 성공 시 True."""
     topic = topic.strip()
@@ -325,6 +413,60 @@ def cmd_notify(message: str) -> str:
     return ""
 
 
+def _post_blocks(text: str, blocks: list[dict]) -> bool:
+    """통보 채널에 blocks 메시지 게시. 성공 True. (버튼 클릭은 상시 봇이 처리)"""
+    _load_env()
+    token = os.environ.get("SLACK_BOT_TOKEN")
+    channel = _notify_channel_id()
+    if not token or not channel:
+        sys.stderr.write("[topics_tool] SLACK_BOT_TOKEN 또는 통보 채널 미설정 — 통보 생략\n")
+        return False
+    payload = json.dumps({"channel": channel, "text": text, "blocks": blocks,
+                          "unfurl_links": False, "unfurl_media": False}).encode("utf-8")
+    req = urllib.request.Request(
+        "https://slack.com/api/chat.postMessage", data=payload,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"},
+    )
+    try:
+        resp = urllib.request.urlopen(req, timeout=10).read().decode("utf-8")
+        if '"ok":true' not in resp:
+            sys.stderr.write(f"[topics_tool] 슬랙 통보 실패: {resp[:200]}\n")
+            return False
+    except Exception as e:  # noqa: BLE001
+        sys.stderr.write(f"[topics_tool] 슬랙 통보 오류: {e}\n")
+        return False
+    return True
+
+
+def cmd_notify_weekly() -> str:
+    """다음 주 주제 요약 + [📧 수신자에게 발송] 버튼을 통보 채널에 게시.
+
+    토요일 자동 갱신(`/refresh-topics --weekly --auto`)이 topics.md 를 다음 주 9건으로
+    교체한 뒤 호출한다. 버튼(action_id=email_topics) 클릭은 상시 봇(bot/server.py)이 처리해
+    현재 topics.md 를 수신자 메일 리스트로 발송한다(승인자 전용).
+    """
+    _, topics = read_topics()
+    week = _existing_week() or _current_iso_week()
+    lines = [f"📅 다음 주({week}) 정기 리포트 주제 {len(topics)}건이 확정되었습니다.", ""]
+    for day in DAYS:
+        rows = [e for _, e in topics if e["day"] == day]
+        if not rows:
+            continue
+        lines.append(f"*{DAY_KO[day]}요일*")
+        for e in rows:
+            lines.append(f"   • {e['topic']} _({e['depth']})_")
+    summary = "\n".join(lines)
+    try:
+        sys.path.insert(0, REPO_ROOT)
+        import slack_blocks  # noqa: E402
+        blocks = slack_blocks.topics_announce_blocks(summary, week=week)
+    except Exception as e:  # noqa: BLE001 — 블록 실패해도 텍스트로라도 통보
+        sys.stderr.write(f"[topics_tool] 주간 통보 블록 생성 실패({e}) — 텍스트 폴백\n")
+        return cmd_notify(summary)
+    ok = _post_blocks(f"다음 주({week}) 정기 주제 확정", blocks)
+    return "주간 통보(버튼 포함) 게시" if ok else "주간 통보 실패"
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         sys.stderr.write(__doc__ or "")
@@ -348,6 +490,10 @@ def main(argv: list[str]) -> int:
         print(cmd_apply_replace_pending(argv[1]))
     elif cmd == "notify":
         cmd_notify(argv[1] if len(argv) > 1 else "")
+    elif cmd == "notify-weekly":
+        print(cmd_notify_weekly())
+    elif cmd == "roster":
+        print(render_roster_md())
     else:
         sys.stderr.write(f"알 수 없는 명령: {cmd}\n")
         return 2

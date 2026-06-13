@@ -36,7 +36,7 @@
      {"topic": "...", "channel": "exec-team", "depth": "medium"}, ... 9개 ]}
    ```
 2. `python3 scripts/topics_tool.py apply-weekly runs/<run-id>/new-topics.json` 실행(전체 교체·3·3·3 배분·전부 pending, 기존 9건은 자동으로 `topics-history`로 이관).
-3. 슬랙 통보: `python3 scripts/topics_tool.py notify "<메시지>"` — "📅 다음 주(<주차>) 정기 주제 9건 확정"과 월·수·금 배분 목록을 담는다(승인 버튼 없음, 결과 공유).
+3. 슬랙 통보: `python3 scripts/topics_tool.py notify-weekly` — "📅 다음 주 정기 주제" 요약(월·수·금 배분)과 **[📧 수신자에게 발송] 버튼**을 통보 채널에 게시한다. 버튼(action_id=email_topics)을 지정 승인자가 누르면 상시 봇이 현재 `topics.md`(다음 주 계획)를 수신자 메일 리스트로 안내 발송한다(승인자 전용).
 
 ### (B) `--replace-pending` (주중 보충 — 사람 승인 생략)
 1. 도출한 N개를 JSON으로 `runs/<run-id>/new-topics.json`에 기록(`topics` 배열만, `week` 불필요).

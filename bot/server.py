@@ -203,6 +203,13 @@ def post_report(client, channel: str, text: str) -> dict:
     3단계 Q&A 스레드 루트(D9). 반환: 첫(루트) 메시지의 {channel, ts}.
     """
     groups = slack_blocks.chunk_blocks(slack_blocks.render_blocks(text))
+    # 뉴스레터 맨 아래: 이번 주 진행현황 로드맵(요일 단위)을 마지막 그룹에 첨부.
+    roster = slack_blocks.roster_blocks(tt.render_roster_mrkdwn())
+    if roster:
+        if len(groups[-1]) + len(roster) <= slack_blocks.MAX_BLOCKS:
+            groups[-1] = groups[-1] + roster
+        else:
+            groups.append(roster)
     fb = slack_blocks.fallback_text(text)
     root = client.chat_postMessage(channel=channel, text=fb, blocks=groups[0],
                                    unfurl_links=False, unfurl_media=False)
@@ -320,7 +327,9 @@ def handle_email_send(ack, body, client, logger):
         return
 
     title = _report_title(archive_path)
-    result = email_sender.send_report_email(subject=title, markdown_body=read_report(archive_path))
+    # 뉴스레터 맨 아래: 이번 주 진행현황 로드맵(요일 단위)을 본문 끝에 첨부.
+    body_md = read_report(archive_path) + "\n\n" + tt.render_roster_md()
+    result = email_sender.send_report_email(subject=title, markdown_body=body_md)
     if not result.get("ok"):
         _notify_ops(client, f"이메일 발송 실패(run-id={run_id}): {result.get('detail')}")
         client.chat_postEphemeral(channel=channel, user=user,
@@ -342,6 +351,45 @@ def handle_email_send(ack, body, client, logger):
     )
     client.chat_postEphemeral(channel=channel, user=user,
                               text=f"📧 이메일 발송 완료 — 수신자 {result.get('count')}명에게 보냈습니다.")
+
+
+# ── 주간 주제 안내 발송 (토요일 갱신 통보의 [📧 수신자에게 발송] 버튼) ──────
+@app.action("email_topics")
+def handle_email_topics(ack, body, client, logger):
+    ack()  # 3초 내 즉시 ack (D4)
+    user = body["user"]["id"]
+    channel = body["channel"]["id"]
+    msg_ts = body["message"]["ts"]
+
+    if not is_approver(user):
+        client.chat_postEphemeral(channel=channel, user=user, text="⛔ 발송 권한이 없습니다(지정 승인자만 가능).")
+        return
+
+    ok, reason = email_sender.email_configured()
+    if not ok:
+        client.chat_postEphemeral(channel=channel, user=user,
+                                  text=f"⚠️ 이메일이 아직 설정되지 않았습니다: {reason}")
+        return
+
+    # 현재 topics.md(=토요일 갱신으로 교체된 다음 주 계획)를 안내 메일로 발송.
+    subject, md = tt.render_topics_email_md()
+    result = email_sender.send_report_email(subject=subject, markdown_body=md)
+    if not result.get("ok"):
+        _notify_ops(client, f"주간 주제 안내 발송 실패: {result.get('detail')}")
+        client.chat_postEphemeral(channel=channel, user=user,
+                                  text=f"⚠️ 발송 실패: {result.get('detail')}")
+        return
+
+    cnt = result.get("count")
+    cnt_txt = f"수신자 {cnt}명" if cnt else "수신자 메일 리스트"
+    # 메시지 갱신: 발송 버튼 제거(중복 발송 방지) + 발송 완료 표시. 주제 요약 블록은 유지.
+    kept = [b for b in body["message"].get("blocks", []) if b.get("block_id") != "topics_email_actions"]
+    kept.append({"type": "context", "elements": [
+        {"type": "mrkdwn", "text": f"📧 발송 완료 — {cnt_txt} (by <@{user}>)"}]})
+    client.chat_update(channel=channel, ts=msg_ts,
+                       text=f"📧 다음 주 주제 안내 발송 완료 — {cnt_txt} (by <@{user}>)", blocks=kept)
+    client.chat_postEphemeral(channel=channel, user=user,
+                              text=f"📧 다음 주 주제 안내를 {cnt_txt}에게 발송했습니다.")
 
 
 # ── 3단계: Q&A (D4·D9) — QA_ENABLED=1 일 때만 활성 ──────────────────────

@@ -293,3 +293,30 @@ def status_action_blocks(run_id: str, *, approved: bool = False, emailed: bool =
 def approval_action_blocks(run_id: str) -> list[dict]:
     """초안 메시지 끝에 붙일 버튼 블록(D5). 초기 상태(미승인·미발송)."""
     return status_action_blocks(run_id)
+
+
+def topics_announce_blocks(summary_mrkdwn: str, *, week: str) -> list[dict]:
+    """주간 주제 안내 + [📧 수신자에게 발송] 버튼 블록.
+
+    토요일 갱신 후 통보 채널에 게시한다. 버튼(action_id=email_topics)을 승인자가 누르면
+    상시 봇이 현재 topics.md 를 수신자 메일 리스트로 발송한다. value 는 주차(로그·식별용).
+    """
+    blocks: list[dict] = [_header("📬 다음 주 정기 리포트 주제")]
+    for piece in _split_text(to_mrkdwn(summary_mrkdwn)):
+        blocks.append(_section(piece))
+    blocks.append(_context("버튼은 지정 승인자만 유효 — 누르면 수신자 메일 리스트로 다음 주 주제 안내가 발송됨"))
+    blocks.append({"type": "actions", "block_id": "topics_email_actions", "elements": [
+        {"type": "button", "style": "primary",
+         "text": {"type": "plain_text", "text": "📧 수신자에게 발송", "emoji": True},
+         "action_id": "email_topics", "value": week}]})
+    return blocks
+
+
+def roster_blocks(roster_mrkdwn: str) -> list[dict]:
+    """본 게시(뉴스레터) 맨 아래에 붙일 진행현황 로드맵 블록(divider + context)."""
+    if not roster_mrkdwn.strip():
+        return []
+    out: list[dict] = [_divider()]
+    for piece in _split_text(roster_mrkdwn):
+        out.append(_context(piece))
+    return out
